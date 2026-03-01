@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soil Temperature</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --soil-dark: #2b1d0e;
+      --clay-red: #c4622d;
+      --clay-light: #e07b42;
+      --cream: #f5ead8;
+      --leaf: #6b8f3e;
+      --sky: #8ab4c9;
+    }
+
+    body {
+      font-family: 'DM Mono', monospace;
+      background-color: var(--soil-dark);
+      color: var(--cream);
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        repeating-linear-gradient(180deg, transparent 0px, transparent 3px, rgba(255,255,255,0.015) 3px, rgba(255,255,255,0.015) 4px),
+        linear-gradient(180deg, #1a0c05 0%, #2b1d0e 15%, #3d2a18 35%, #4a3728 55%, #3a2a1a 75%, #2b1d0e 100%);
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 3rem 2rem 4rem;
+    }
+
+    header { margin-bottom: 2.5rem; animation: fadeDown 0.8s ease both; }
+
+    .location-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(196,98,45,0.2);
+      border: 1px solid var(--clay-red);
+      border-radius: 2px;
+      padding: 0.3rem 0.8rem;
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--clay-light);
+      margin-bottom: 1rem;
+      transition: opacity 0.3s;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 700;
+      line-height: 1.1;
+      color: var(--cream);
+      letter-spacing: -0.02em;
+    }
+
+    h1 span { color: var(--clay-light); }
+
+    .subtitle {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      color: #a08060;
+    }
+
+    /* ── Zip input ── */
+    .zip-row {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      margin-top: 1.5rem;
+      max-width: 360px;
+    }
+
+    .zip-label {
+      display: block;
+      font-size: 0.6rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #a08060;
+      margin-bottom: 0.5rem;
+    }
+
+    .zip-input {
+      flex: 1;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(196,98,45,0.45);
+      border-right: none;
+      border-radius: 3px 0 0 3px;
+      color: var(--cream);
+      font-family: 'DM Mono', monospace;
+      font-size: 1rem;
+      letter-spacing: 0.12em;
+      padding: 0.6rem 1rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      width: 0; /* flex handles it */
+    }
+
+    .zip-input::placeholder { color: #7a5c3e; }
+
+    .zip-input:focus {
+      border-color: var(--clay-light);
+      box-shadow: 0 0 0 2px rgba(224,123,66,0.15);
+    }
+
+    .zip-input.error {
+      border-color: #c44;
+      box-shadow: 0 0 0 2px rgba(200,60,60,0.15);
+      animation: shake 0.35s ease;
+    }
+
+    .zip-btn {
+      background: var(--clay-red);
+      border: 1px solid var(--clay-red);
+      border-radius: 0 3px 3px 0;
+      color: var(--cream);
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      padding: 0.6rem 1.1rem;
+      text-transform: uppercase;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+
+    .zip-btn:hover { background: var(--clay-light); border-color: var(--clay-light); }
+    .zip-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .zip-error {
+      font-size: 0.65rem;
+      color: #e06060;
+      margin-top: 0.4rem;
+      letter-spacing: 0.05em;
+      min-height: 1rem;
+    }
+
+    /* ── Current card ── */
+    .current-card {
+      background: linear-gradient(135deg, rgba(196,98,45,0.15) 0%, rgba(74,55,40,0.4) 100%);
+      border: 1px solid rgba(196,98,45,0.4);
+      border-radius: 4px;
+      padding: 2.5rem;
+      margin-bottom: 2rem;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 2rem;
+      animation: fadeUp 0.9s 0.2s ease both;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .current-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--clay-red), var(--clay-light), transparent);
+    }
+
+    .current-label {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #a08060;
+      margin-bottom: 0.5rem;
+    }
+
+    .current-temp {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(3rem, 8vw, 5.5rem);
+      font-weight: 400;
+      color: var(--clay-light);
+      line-height: 1;
+    }
+
+    .current-temp sup {
+      font-size: 0.35em;
+      vertical-align: super;
+      color: var(--cream);
+      opacity: 0.7;
+    }
+
+    .current-meta {
+      font-size: 0.72rem;
+      color: #a08060;
+      margin-top: 0.5rem;
+      line-height: 1.6;
+    }
+
+    .depth-badge {
+      background: rgba(107,143,62,0.2);
+      border: 1px solid var(--leaf);
+      border-radius: 2px;
+      padding: 1rem 1.5rem;
+      text-align: center;
+    }
+
+    .depth-val {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.8rem;
+      color: var(--leaf);
+      display: block;
+    }
+
+    .depth-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #6b8060;
+      display: block;
+      margin-top: 0.3rem;
+    }
+
+    .section { margin-bottom: 2rem; animation: fadeUp 1s 0.4s ease both; }
+
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 1.2rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid rgba(196,98,45,0.25);
+    }
+
+    .section-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.2rem;
+      color: var(--cream);
+    }
+
+    .section-sub {
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      color: #a08060;
+      text-transform: uppercase;
+    }
+
+    .chart-wrap {
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 4px;
+      padding: 1.5rem;
+    }
+
+    canvas { display: block; width: 100% !important; }
+
+    .days-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .day-card {
+      background: rgba(74,55,40,0.3);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 4px;
+      padding: 1rem 0.75rem;
+      text-align: center;
+      transition: border-color 0.2s, transform 0.2s, background 0.2s;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .day-card:hover { border-color: var(--clay-red); transform: translateY(-2px); }
+    .day-card.today { border-color: rgba(196,98,45,0.6); background: rgba(196,98,45,0.15); }
+    .day-card.selected {
+      border-color: var(--clay-light) !important;
+      background: rgba(224,123,66,0.22) !important;
+      transform: translateY(-3px);
+      box-shadow: 0 4px 20px rgba(196,98,45,0.3);
+    }
+
+    .day-name { font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: #a08060; margin-bottom: 0.5rem; }
+    .day-temp-max { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: var(--clay-light); line-height: 1; }
+    .day-temp-min { font-size: 0.7rem; color: var(--sky); margin-top: 0.2rem; }
+    .day-unit { font-size: 0.55rem; color: #a08060; margin-top: 0.3rem; }
+
+    .status { text-align: center; padding: 3rem; color: #a08060; font-size: 0.8rem; letter-spacing: 0.1em; }
+
+    .error-box {
+      color: #e07b42;
+      background: rgba(196,98,45,0.1);
+      border: 1px solid rgba(196,98,45,0.3);
+      border-radius: 4px;
+      padding: 1.2rem 1.5rem;
+      font-size: 0.78rem;
+      line-height: 1.8;
+    }
+
+    .loader {
+      width: 24px; height: 24px;
+      border: 2px solid rgba(196,98,45,0.3);
+      border-top-color: var(--clay-red);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    .timestamp { text-align: right; font-size: 0.6rem; color: #6b5040; letter-spacing: 0.08em; margin-top: 2rem; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+
+    @media (max-width: 600px) {
+      .current-card { grid-template-columns: 1fr; }
+      .days-grid { grid-template-columns: repeat(3, 1fr); }
+      .zip-row { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="location-badge" id="locationBadge">◈ &nbsp;Washington, DC USA · 38.8977°N, 77.03636°W</div>
+    <h1>Soil <span>Temperature</span></h1>
+    <p class="subtitle">// 6 cm depth · Open-Meteo API · °F</p>
+
+    <div style="margin-top:1.5rem;">
+      <span class="zip-label">// Enter a ZIP code</span>
+      <div class="zip-row">
+        <input
+          class="zip-input"
+          id="zipInput"
+          type="text"
+          inputmode="numeric"
+          maxlength="5"
+          placeholder="e.g. 20500"
+          value="20500"
+          autocomplete="postal-code"
+        />
+        <button class="zip-btn" id="zipBtn" onclick="handleZip()">Search</button>
+      </div>
+      <div class="zip-error" id="zipError"></div>
+    </div>
+  </header>
+
+  <div id="app">
+    <div class="status"><div class="loader"></div>Fetching soil data…</div>
+  </div>
+
+  <div class="timestamp" id="timestamp"></div>
+</div>
+
+<script>
+  // ── State ─────────────────────────────────────────────────────────────────
+  let currentLat = 38.8977;
+  let currentLon = -77.03636;
+  let currentLocation = { city: 'Washington', state: 'DC', zip: '20500' };
+
+  let byDay = {};
+  let hourlyChart = null;
+  let historyChart = null;
+
+  const toF = c => +(c * 9 / 5 + 32).toFixed(1);
+
+  // ── ZIP → lat/lon via Zippopotam.us (free, no key) ───────────────────────
+  async function resolveZip(zip) {
+    const resp = await fetch(`https://api.zippopotam.us/us/${zip}`);
+    if (resp.status === 404) throw new Error(`ZIP code ${zip} not found.`);
+    if (!resp.ok) throw new Error(`ZIP lookup failed (HTTP ${resp.status}).`);
+    const data = await resp.json();
+    const place = data.places[0];
+    return {
+      lat: parseFloat(place.latitude),
+      lon: parseFloat(place.longitude),
+      city: place['place name'],
+      state: place['state abbreviation'],
+      zip,
+    };
+  }
+
+  // ── Handle zip form ───────────────────────────────────────────────────────
+  async function handleZip() {
+    const input = document.getElementById('zipInput');
+    const btn = document.getElementById('zipBtn');
+    const errEl = document.getElementById('zipError');
+    const zip = input.value.trim();
+
+    errEl.textContent = '';
+    input.classList.remove('error');
+
+    if (!/^\d{5}$/.test(zip)) {
+      input.classList.add('error');
+      errEl.textContent = 'Please enter a valid 5-digit US ZIP code.';
+      setTimeout(() => input.classList.remove('error'), 400);
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+
+    try {
+      const loc = await resolveZip(zip);
+      currentLat = loc.lat;
+      currentLon = loc.lon;
+      currentLocation = loc;
+      await loadAndRender();
+    } catch (err) {
+      input.classList.add('error');
+      errEl.textContent = err.message;
+      setTimeout(() => input.classList.remove('error'), 400);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Search';
+    }
+  }
+
+  // Allow pressing Enter in the input
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('zipInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleZip();
+    });
+  });
+
+  // ── Fetch soil data ───────────────────────────────────────────────────────
+  async function fetchData(lat, lon) {
+    const url =
+      `https://api.open-meteo.com/v1/forecast` +
+      `?latitude=${lat}&longitude=${lon}` +
+      `&hourly=soil_temperature_6cm` +
+      `&temperature_unit=celsius` +
+      `&timezone=auto` +
+      `&past_days=4` +
+      `&forecast_days=1`;
+
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => '');
+      throw new Error(`HTTP ${resp.status} from Open-Meteo: ${txt.slice(0, 200)}`);
+    }
+    const json = await resp.json();
+    if (!json.hourly?.time || !json.hourly?.soil_temperature_6cm) {
+      throw new Error('Unexpected API response: ' + JSON.stringify(json).slice(0, 200));
+    }
+    return json;
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function strDate(t) { return t.slice(0, 10); }
+  function strHour(t) { return parseInt(t.slice(11, 13), 10); }
+
+  function todayStr() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  }
+
+  function friendlyLabel(dateStr) {
+    if (dateStr === todayStr()) return 'Today';
+    const d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function hourLabel(h) {
+    if (h === 0) return '12 am';
+    if (h < 12) return `${h} am`;
+    if (h === 12) return '12 pm';
+    return `${h - 12} pm`;
+  }
+
+  // ── Process ───────────────────────────────────────────────────────────────
+  function processData(json) {
+    const times = json.hourly.time;
+    const rawTemps = json.hourly.soil_temperature_6cm;
+    const today = todayStr();
+    const nowETHour = parseInt(
+      new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit' }), 10
+    );
+
+    byDay = {};
+    times.forEach((t, i) => {
+      if (rawTemps[i] === null) return;
+      const d = strDate(t);
+      if (!byDay[d]) byDay[d] = [];
+      byDay[d].push({ h: strHour(t), tempC: rawTemps[i] });
+    });
+
+    const sortedDays = Object.keys(byDay).sort();
+
+    const days = sortedDays.map(d => {
+      const vals = byDay[d].map(e => e.tempC);
+      return { dateStr: d, label: friendlyLabel(d), maxC: Math.max(...vals), minC: Math.min(...vals) };
+    });
+
+    const todayEntries = (byDay[today] || []).sort((a, b) => a.h - b.h);
+    const todayLabels = todayEntries.map(e => hourLabel(e.h));
+    const todayTempsF = todayEntries.map(e => toF(e.tempC));
+
+    let currentTempC = null;
+    if (byDay[today]) {
+      let bestDiff = Infinity;
+      byDay[today].forEach(e => {
+        const diff = Math.abs(e.h - nowETHour);
+        if (diff < bestDiff) { bestDiff = diff; currentTempC = e.tempC; }
+      });
+    }
+    if (currentTempC === null && sortedDays.length > 0) {
+      const last = byDay[sortedDays[sortedDays.length - 1]];
+      currentTempC = last[last.length - 1].tempC;
+    }
+
+    return { currentTempC, days, todayLabels, todayTempsF };
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  function render({ currentTempC, days, todayLabels, todayTempsF }) {
+    const currentF = toF(currentTempC);
+    const loc = currentLocation;
+
+    // Update location badge
+    document.getElementById('locationBadge').innerHTML =
+      `◈ &nbsp;${loc.city}, ${loc.state} · ${currentLat.toFixed(4)}°N, ${Math.abs(currentLon).toFixed(4)}°W`;
+
+    // Destroy old chart instances before rebuilding DOM
+    if (hourlyChart) { hourlyChart.destroy(); hourlyChart = null; }
+    if (historyChart) { historyChart.destroy(); historyChart = null; }
+
+    document.getElementById('app').innerHTML = `
+      <div class="current-card">
+        <div>
+          <div class="current-label">// Current Soil Temperature</div>
+          <div class="current-temp">${currentF}<sup>°F</sup></div>
+          <div class="current-meta">
+            ${currentTempC.toFixed(1)}°C &nbsp;·&nbsp; ${loc.city}, ${loc.state} (${loc.zip})
+          </div>
+        </div>
+        <div class="depth-badge">
+          <span class="depth-val">6</span>
+          <span class="depth-label">cm<br>depth</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title" id="hourlyTitle">Today's Soil Temperature</span>
+          <span class="section-sub">Hourly · °F</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="todayChart" height="220"></canvas>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">5-Day Overview</span>
+          <span class="section-sub">Daily max / min · °F</span>
+        </div>
+        <div class="days-grid">
+          ${days.map(d => `
+            <div class="day-card${d.label === 'Today' ? ' today' : ''}" data-date="${d.dateStr}">
+              <div class="day-name">${d.label}</div>
+              <div class="day-temp-max">${toF(d.maxC)}°</div>
+              <div class="day-temp-min">↓ ${toF(d.minC)}°</div>
+              <div class="day-unit">°F</div>
+            </div>`).join('')}
+        </div>
+        <div class="chart-wrap">
+          <canvas id="historyChart" height="200"></canvas>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('timestamp').textContent =
+      `// fetched ${new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })} ET`;
+
+    // Hourly chart
+    hourlyChart = new Chart(document.getElementById('todayChart'), {
+      type: 'line',
+      data: {
+        labels: todayLabels,
+        datasets: [{
+          label: 'Soil Temp (°F)',
+          data: todayTempsF,
+          borderColor: '#c4622d',
+          backgroundColor: 'rgba(196,98,45,0.12)',
+          borderWidth: 2.5,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#e07b42',
+          fill: true,
+          tension: 0.4,
+        }]
+      },
+      options: chartOpts()
+    });
+
+    // 5-day chart
+    historyChart = new Chart(document.getElementById('historyChart'), {
+      type: 'line',
+      data: {
+        labels: days.map(d => d.label),
+        datasets: [
+          {
+            label: 'Daily Max (°F)',
+            data: days.map(d => toF(d.maxC)),
+            borderColor: '#c4622d',
+            backgroundColor: 'rgba(196,98,45,0.1)',
+            borderWidth: 2,
+            pointRadius: 5,
+            pointBackgroundColor: '#e07b42',
+            fill: '+1',
+            tension: 0.35,
+          },
+          {
+            label: 'Daily Min (°F)',
+            data: days.map(d => toF(d.minC)),
+            borderColor: '#8ab4c9',
+            backgroundColor: 'rgba(138,180,201,0.08)',
+            borderWidth: 2,
+            pointRadius: 5,
+            pointBackgroundColor: '#8ab4c9',
+            fill: false,
+            tension: 0.35,
+          }
+        ]
+      },
+      options: chartOpts()
+    });
+
+    // Wire up day card clicks
+    const today = todayStr();
+    document.querySelectorAll('.day-card').forEach(card => {
+      card.addEventListener('click', () => selectDay(card.dataset.date, days));
+    });
+
+    // Select today's card by default
+    const todayCard = document.querySelector(`.day-card[data-date="${today}"]`);
+    if (todayCard) todayCard.classList.add('selected');
+  }
+
+  // ── selectDay ─────────────────────────────────────────────────────────────
+  function selectDay(dateStr, days) {
+    document.querySelectorAll('.day-card').forEach(c => c.classList.remove('selected'));
+    const active = document.querySelector(`.day-card[data-date="${dateStr}"]`);
+    if (active) active.classList.add('selected');
+
+    const entries = (byDay[dateStr] || []).slice().sort((a, b) => a.h - b.h);
+    const labels = entries.map(e => hourLabel(e.h));
+    const tempsF = entries.map(e => toF(e.tempC));
+
+    const dayInfo = days.find(d => d.dateStr === dateStr);
+    const titleEl = document.getElementById('hourlyTitle');
+    if (titleEl && dayInfo) {
+      titleEl.textContent = dayInfo.label === 'Today'
+        ? "Today's Soil Temperature"
+        : `${dayInfo.label} Soil Temperature`;
+    }
+
+    if (hourlyChart) {
+      hourlyChart.data.labels = labels;
+      hourlyChart.data.datasets[0].data = tempsF;
+      hourlyChart.update('active');
+    }
+
+    document.getElementById('todayChart')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ── Chart options ─────────────────────────────────────────────────────────
+  function chartOpts() {
+    return {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: '#a08060', font: { family: 'DM Mono', size: 10 }, boxWidth: 12 }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(20,12,5,0.95)',
+          borderColor: 'rgba(196,98,45,0.4)',
+          borderWidth: 1,
+          titleColor: '#e07b42',
+          bodyColor: '#f5ead8',
+          titleFont: { family: 'DM Mono', size: 11 },
+          bodyFont: { family: 'DM Mono', size: 11 },
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}°F` }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#7a5c3e', font: { family: 'DM Mono', size: 10 }, maxRotation: 45 },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(196,98,45,0.2)' },
+        },
+        y: {
+          ticks: {
+            color: '#7a5c3e',
+            font: { family: 'DM Mono', size: 10 },
+            callback: v => `${v}°F`
+          },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(196,98,45,0.2)' },
+        }
+      }
+    };
+  }
+
+  // ── Load & render (called on init and on zip change) ──────────────────────
+  async function loadAndRender() {
+    document.getElementById('app').innerHTML =
+      `<div class="status"><div class="loader"></div>Fetching soil data…</div>`;
+
+    try {
+      const json = await fetchData(currentLat, currentLon);
+      const data = processData(json);
+      if (data.currentTempC === null) throw new Error('No temperature data found for this location.');
+      render(data);
+    } catch (err) {
+      document.getElementById('app').innerHTML = `
+        <div class="error-box">
+          ⚠ <strong>Failed to load soil data</strong><br><br>
+          ${err.message}<br><br>
+          Make sure you have an active internet connection. Open the browser console (F12) for full details.
+        </div>
+      `;
+      console.error('[Soil Temp App]', err);
+    }
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+  loadAndRender();
+</script>
+</body>
+</html>

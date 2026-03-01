@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soil Temperature & GDD</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --soil-dark: #2b1d0e;
+      --clay-red: #c4622d;
+      --clay-light: #e07b42;
+      --cream: #f5ead8;
+      --leaf: #6b8f3e;
+      --leaf-light: #8ab85a;
+      --sky: #8ab4c9;
+      --forecast: #a0c4e8;
+    }
+    body {
+      font-family: 'DM Mono', monospace;
+      background-color: var(--soil-dark);
+      color: var(--cream);
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        repeating-linear-gradient(180deg, transparent 0px, transparent 3px, rgba(255,255,255,0.015) 3px, rgba(255,255,255,0.015) 4px),
+        linear-gradient(180deg, #1a0c05 0%, #2b1d0e 15%, #3d2a18 35%, #4a3728 55%, #3a2a1a 75%, #2b1d0e 100%);
+      z-index: 0;
+    }
+    .container { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 3rem 2rem 4rem; }
+    header { margin-bottom: 2.5rem; animation: fadeDown 0.8s ease both; }
+    .location-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: rgba(196,98,45,0.2); border: 1px solid var(--clay-red);
+      border-radius: 2px; padding: 0.3rem 0.8rem;
+      font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase;
+      color: var(--clay-light); margin-bottom: 1rem;
+    }
+    h1 { font-family: 'Playfair Display', serif; font-size: clamp(2rem,5vw,3.5rem); font-weight: 700; line-height: 1.1; color: var(--cream); letter-spacing: -0.02em; }
+    h1 span { color: var(--clay-light); }
+    .subtitle { margin-top: 0.5rem; font-size: 0.75rem; letter-spacing: 0.1em; color: #a08060; }
+
+    /* Controls */
+    .controls-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1.5rem; margin-top: 1.5rem; }
+    .control-group { display: flex; flex-direction: column; }
+    .ctrl-label { font-size: 0.6rem; letter-spacing: 0.18em; text-transform: uppercase; color: #a08060; margin-bottom: 0.45rem; }
+    .input-row { display: flex; align-items: stretch; }
+    .ctrl-input {
+      background: rgba(0,0,0,0.35); border: 1px solid rgba(196,98,45,0.45); border-right: none;
+      border-radius: 3px 0 0 3px; color: var(--cream); font-family: 'DM Mono', monospace;
+      font-size: 1rem; letter-spacing: 0.1em; padding: 0.6rem 1rem; outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .ctrl-input.zip-field { width: 140px; }
+    .ctrl-input.base-field { width: 90px; }
+    .ctrl-input::placeholder { color: #7a5c3e; }
+    .ctrl-input:focus { border-color: var(--clay-light); box-shadow: 0 0 0 2px rgba(224,123,66,0.15); }
+    .ctrl-input.error { border-color: #c44; box-shadow: 0 0 0 2px rgba(200,60,60,0.15); animation: shake 0.35s ease; }
+    .ctrl-btn {
+      background: var(--clay-red); border: 1px solid var(--clay-red); border-radius: 0 3px 3px 0;
+      color: var(--cream); cursor: pointer; font-family: 'DM Mono', monospace;
+      font-size: 0.72rem; letter-spacing: 0.1em; padding: 0.6rem 1.1rem;
+      text-transform: uppercase; transition: background 0.2s; white-space: nowrap;
+    }
+    .ctrl-btn:hover { background: var(--clay-light); border-color: var(--clay-light); }
+    .ctrl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .base-suffix {
+      background: rgba(0,0,0,0.25); border: 1px solid rgba(196,98,45,0.45); border-left: none;
+      border-radius: 0 3px 3px 0; color: #a08060; font-size: 0.8rem; padding: 0.6rem 0.75rem;
+      display: flex; align-items: center;
+    }
+    .ctrl-error { font-size: 0.62rem; color: #e06060; margin-top: 0.35rem; letter-spacing: 0.05em; min-height: 0.9rem; }
+
+    /* Stat cards */
+    .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem; animation: fadeUp 0.9s 0.2s ease both; }
+    .stat-card { border-radius: 4px; padding: 2rem 2rem 1.75rem; position: relative; overflow: hidden; }
+    .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+    .stat-card.temp-card { background: linear-gradient(135deg, rgba(196,98,45,0.15) 0%, rgba(74,55,40,0.4) 100%); border: 1px solid rgba(196,98,45,0.4); }
+    .stat-card.temp-card::before { background: linear-gradient(90deg, var(--clay-red), var(--clay-light), transparent); }
+    .stat-card.gdd-card { background: linear-gradient(135deg, rgba(107,143,62,0.15) 0%, rgba(50,70,30,0.4) 100%); border: 1px solid rgba(107,143,62,0.45); }
+    .stat-card.gdd-card::before { background: linear-gradient(90deg, var(--leaf), var(--leaf-light), transparent); }
+    .stat-label { font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase; color: #a08060; margin-bottom: 0.4rem; }
+    .stat-value { font-family: 'Playfair Display', serif; font-size: clamp(2.4rem,5vw,4rem); font-weight: 400; line-height: 1; }
+    .stat-card.temp-card .stat-value { color: var(--clay-light); }
+    .stat-card.gdd-card .stat-value { color: var(--leaf-light); }
+    .stat-value sup { font-size: 0.32em; vertical-align: super; color: var(--cream); opacity: 0.65; }
+    .stat-meta { font-size: 0.68rem; color: #a08060; margin-top: 0.45rem; line-height: 1.55; }
+    .stat-sub { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.8rem; }
+    .stat-pill { font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.2rem 0.55rem; border-radius: 2px; }
+    .temp-card .stat-pill { background: rgba(196,98,45,0.2); color: var(--clay-light); border: 1px solid rgba(196,98,45,0.35); }
+    .gdd-card .stat-pill  { background: rgba(107,143,62,0.2); color: var(--leaf-light); border: 1px solid rgba(107,143,62,0.35); }
+
+    /* Forecast badge */
+    .forecast-badge {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: rgba(100,160,200,0.12); border: 1px solid rgba(100,160,200,0.35);
+      border-radius: 2px; padding: 0.15rem 0.55rem;
+      font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--forecast);
+    }
+
+    /* Sections */
+    .section { margin-bottom: 2rem; animation: fadeUp 1s 0.4s ease both; }
+    .section-header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.2rem; padding-bottom: 0.6rem; border-bottom: 1px solid rgba(196,98,45,0.25); }
+    .section-header.gdd-header { border-bottom-color: rgba(107,143,62,0.3); }
+    .section-title { font-family: 'Playfair Display', serif; font-size: 1.2rem; color: var(--cream); }
+    .section-sub { font-size: 0.65rem; letter-spacing: 0.1em; color: #a08060; text-transform: uppercase; }
+    .chart-wrap { background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.07); border-radius: 4px; padding: 1.5rem; }
+    canvas { display: block; width: 100% !important; }
+
+    /* Day cards */
+    .days-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
+    .day-card { background: rgba(74,55,40,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 1rem 0.75rem; text-align: center; transition: border-color 0.2s, transform 0.2s, background 0.2s; cursor: pointer; user-select: none; }
+    .day-card:hover { border-color: var(--clay-red); transform: translateY(-2px); }
+    .day-card.today { border-color: rgba(196,98,45,0.6); background: rgba(196,98,45,0.15); }
+    .day-card.selected { border-color: var(--clay-light) !important; background: rgba(224,123,66,0.22) !important; transform: translateY(-3px); box-shadow: 0 4px 20px rgba(196,98,45,0.3); }
+    .day-card.forecast-card { border-color: rgba(100,160,200,0.3); background: rgba(100,160,200,0.06); }
+    .day-card.forecast-card:hover { border-color: var(--forecast); }
+    .day-card.forecast-card.selected { border-color: var(--forecast) !important; background: rgba(100,160,200,0.18) !important; box-shadow: 0 4px 20px rgba(100,160,200,0.2); }
+    .day-name { font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: #a08060; margin-bottom: 0.45rem; }
+    .day-temp-max { font-family: 'Playfair Display', serif; font-size: 1.35rem; color: var(--clay-light); line-height: 1; }
+    .day-card.forecast-card .day-temp-max { color: var(--forecast); opacity: 0.85; }
+    .day-temp-min { font-size: 0.68rem; color: var(--sky); margin-top: 0.2rem; }
+    .day-gdd  { font-size: 0.62rem; color: var(--leaf-light); margin-top: 0.3rem; }
+    .day-unit { font-size: 0.52rem; color: #a08060; margin-top: 0.25rem; }
+
+    /* Status */
+    .status { text-align: center; padding: 3rem; color: #a08060; font-size: 0.8rem; letter-spacing: 0.1em; }
+    .error-box { color: #e07b42; background: rgba(196,98,45,0.1); border: 1px solid rgba(196,98,45,0.3); border-radius: 4px; padding: 1.2rem 1.5rem; font-size: 0.78rem; line-height: 1.8; }
+    .loader { width: 24px; height: 24px; border: 2px solid rgba(196,98,45,0.3); border-top-color: var(--clay-red); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+    .timestamp { text-align: right; font-size: 0.6rem; color: #6b5040; letter-spacing: 0.08em; margin-top: 2rem; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeDown { from { opacity:0; transform:translateY(-20px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes fadeUp   { from { opacity:0; transform:translateY( 20px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
+
+    @media (max-width: 650px) {
+      .stat-row { grid-template-columns: 1fr; }
+      .days-grid { grid-template-columns: repeat(3, 1fr); }
+      .controls-row { gap: 1rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="location-badge" id="locationBadge">◈ &nbsp;Washington, DC USA · 38.8977°N, 77.03636°W</div>
+    <h1>Soil Temperature & GDD</h1>
+    <p class="subtitle">// 6 cm depth · Open-Meteo · observed + 45-day forecast</p>
+    <div class="controls-row">
+      <div class="control-group">
+        <span class="ctrl-label">// ZIP code</span>
+        <div class="input-row">
+          <input class="ctrl-input zip-field" id="zipInput" type="text" inputmode="numeric" maxlength="5" placeholder="e.g. 20500" value="20500" autocomplete="postal-code" />
+          <button class="ctrl-btn" id="zipBtn" onclick="handleZip()">Search</button>
+        </div>
+        <div class="ctrl-error" id="zipError"></div>
+      </div>
+      <div class="control-group">
+        <span class="ctrl-label">// GDD base temperature</span>
+        <div class="input-row">
+          <input class="ctrl-input base-field" id="baseInput" type="number" min="-20" max="100" step="1" value="50" />
+          <span class="base-suffix">°F</span>
+        </div>
+        <div class="ctrl-error" id="baseError"></div>
+      </div>
+    </div>
+  </header>
+
+  <div id="app">
+    <div class="status"><div class="loader"></div>Fetching soil data…</div>
+  </div>
+  <div class="timestamp" id="timestamp"></div>
+</div>
+
+<script>
+  // ─────────────────────────────────────────────────────────────────────────
+  // State
+  // ─────────────────────────────────────────────────────────────────────────
+  let currentLat = 38.8977, currentLon = -77.03636;
+  let currentLocation = { city: 'Washington', state: 'DC', zip: '20500' };
+  let baseTempF = 50;
+
+  let byDay = {};                          // { "YYYY-MM-DD": [{h, tempC}] }
+  let hourlyChart = null, historyChart = null, gddChart = null;
+
+  const toF  = c  => c * 9 / 5 + 32;
+  const toF1 = c  => +(toF(c)).toFixed(1);
+  const fmt1 = v  => +v.toFixed(1);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // GDD
+  // ─────────────────────────────────────────────────────────────────────────
+  function calcGDD(maxF, minF, base) { return Math.max(0, (maxF + minF) / 2 - base); }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ZIP lookup
+  // ─────────────────────────────────────────────────────────────────────────
+  async function resolveZip(zip) {
+    const r = await fetch(`https://api.zippopotam.us/us/${zip}`);
+    if (r.status === 404) throw new Error(`ZIP code ${zip} not found.`);
+    if (!r.ok) throw new Error(`ZIP lookup failed (HTTP ${r.status}).`);
+    const d = await r.json(); const p = d.places[0];
+    return { lat: parseFloat(p.latitude), lon: parseFloat(p.longitude), city: p['place name'], state: p['state abbreviation'], zip };
+  }
+
+  async function handleZip() {
+    const inp = document.getElementById('zipInput'), btn = document.getElementById('zipBtn'), err = document.getElementById('zipError');
+    const zip = inp.value.trim(); err.textContent = ''; inp.classList.remove('error');
+    if (!/^\d{5}$/.test(zip)) { inp.classList.add('error'); err.textContent = 'Please enter a valid 5-digit US ZIP code.'; setTimeout(() => inp.classList.remove('error'), 400); return; }
+    btn.disabled = true; btn.textContent = 'Loading…';
+    try { const loc = await resolveZip(zip); currentLat = loc.lat; currentLon = loc.lon; currentLocation = loc; await loadAndRender(); }
+    catch (e) { inp.classList.add('error'); err.textContent = e.message; setTimeout(() => inp.classList.remove('error'), 400); }
+    finally { btn.disabled = false; btn.textContent = 'Search'; }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('zipInput').addEventListener('keydown', e => { if (e.key === 'Enter') handleZip(); });
+    document.getElementById('baseInput').addEventListener('change', () => {
+      const v = parseFloat(document.getElementById('baseInput').value);
+      const err = document.getElementById('baseError');
+      if (isNaN(v) || v < -20 || v > 100) { err.textContent = 'Enter a base temp between -20 and 100 °F.'; return; }
+      err.textContent = ''; baseTempF = v;
+      if (Object.keys(byDay).length > 0) loadAndRender();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // API Fetches
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Recent 5-day hourly (forecast API)
+  async function fetchRecent(lat, lon) {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=soil_temperature_6cm&temperature_unit=celsius&timezone=auto&past_days=4&forecast_days=1`;
+    const r = await fetch(url); if (!r.ok) throw new Error(`Forecast API HTTP ${r.status}`);
+    const j = await r.json(); if (!j.hourly?.time) throw new Error('Unexpected forecast API response.'); return j;
+  }
+
+  // Year-to-date daily means (archive API)
+  async function fetchYearData(lat, lon) {
+    const year = new Date().getFullYear();
+    const yd = new Date(); yd.setDate(yd.getDate() - 1);
+    const endDate = yd.toLocaleDateString('en-CA');
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&daily=soil_temperature_0_to_7cm_mean&temperature_unit=celsius&timezone=auto&start_date=${year}-01-01&end_date=${endDate}`;
+    const r = await fetch(url); if (!r.ok) throw new Error(`Archive API HTTP ${r.status}`);
+    return r.json();
+  }
+
+  // Historical climatology: 3 prior years of daily soil means for the next 45 calendar days
+  // Fetches each prior year's equivalent date range to build a day-of-year average
+  async function fetchClimatology(lat, lon) {
+    const today = new Date();
+    const year  = today.getFullYear();
+
+    // We want climate normals for the next 45 days of the calendar.
+    // Fetch 3 prior years of the same 45-day window from the archive.
+    const priorYears = [year - 1, year - 2, year - 3];
+
+    const allFetches = priorYears.map(py => {
+      // Build start/end in that prior year aligned to today's day-of-year
+      const start = new Date(today); start.setFullYear(py);
+      const end   = new Date(start); end.setDate(end.getDate() + 44);
+      const startStr = start.toLocaleDateString('en-CA');
+      const endStr   = end.toLocaleDateString('en-CA');
+      const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&daily=soil_temperature_0_to_7cm_mean&temperature_unit=celsius&timezone=auto&start_date=${startStr}&end_date=${endStr}`;
+      return fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
+    });
+
+    const results = await Promise.all(allFetches);
+
+    // Build day-offset → [mean_C values] map  (offset 0 = today, 1 = tomorrow, …)
+    const byOffset = {};
+    results.forEach(res => {
+      if (!res?.daily?.time) return;
+      res.daily.time.forEach((_, i) => {
+        if (res.daily.soil_temperature_0_to_7cm_mean[i] === null) return;
+        if (!byOffset[i]) byOffset[i] = [];
+        byOffset[i].push(res.daily.soil_temperature_0_to_7cm_mean[i]);
+      });
+    });
+
+    // Average across years for each offset
+    const climMeans = Array.from({ length: 45 }, (_, i) => {
+      const vals = byOffset[i] || [];
+      if (!vals.length) return null;
+      return vals.reduce((a, b) => a + b, 0) / vals.length;
+    });
+
+    return climMeans; // [meanC_day0, meanC_day1, … meanC_day89]
+  }
+
+  // Also fetch prior-year YTD for bias-correction anchor point
+  async function fetchRecentArchive(lat, lon) {
+    // Get archive for past 14 days (yesterday back) to compute observed vs clim bias
+    const end = new Date(); end.setDate(end.getDate() - 1);
+    const start = new Date(end); start.setDate(start.getDate() - 13);
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&daily=soil_temperature_0_to_7cm_mean&temperature_unit=celsius&timezone=auto&start_date=${start.toLocaleDateString('en-CA')}&end_date=${end.toLocaleDateString('en-CA')}`;
+    const r = await fetch(url); if (!r.ok) return null;
+    return r.json();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Helpers
+  // ─────────────────────────────────────────────────────────────────────────
+  function strDate(t) { return t.slice(0, 10); }
+  function strHour(t) { return parseInt(t.slice(11, 13), 10); }
+  function todayStr() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); }
+  function addDays(dateStr, n) {
+    const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate() + n);
+    return d.toLocaleDateString('en-CA');
+  }
+  function friendlyLabel(dateStr) {
+    if (dateStr === todayStr()) return 'Today';
+    const d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+  function shortLabel(dateStr) {
+    const d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+  function hourLabel(h) {
+    if (h === 0) return '12 am'; if (h < 12) return `${h} am`;
+    if (h === 12) return '12 pm'; return `${h - 12} pm`;
+  }
+
+  // Smooth an array with a simple centred moving average (window=7)
+  function smooth(arr, w = 7) {
+    const half = Math.floor(w / 2);
+    return arr.map((_, i) => {
+      const slice = arr.slice(Math.max(0, i - half), Math.min(arr.length, i + half + 1));
+      return slice.reduce((a, b) => a + (b ?? 0), 0) / slice.filter(v => v !== null).length;
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Process recent data
+  // ─────────────────────────────────────────────────────────────────────────
+  function processRecent(json) {
+    const times = json.hourly.time, rawTemps = json.hourly.soil_temperature_6cm;
+    const today = todayStr();
+    const nowETHour = parseInt(new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit' }), 10);
+
+    byDay = {};
+    times.forEach((t, i) => {
+      if (rawTemps[i] === null) return;
+      const d = strDate(t);
+      if (!byDay[d]) byDay[d] = [];
+      byDay[d].push({ h: strHour(t), tempC: rawTemps[i] });
+    });
+
+    const sortedDays = Object.keys(byDay).sort();
+    const days = sortedDays.map(d => {
+      const vals = byDay[d].map(e => e.tempC);
+      const maxC = Math.max(...vals), minC = Math.min(...vals);
+      return { dateStr: d, label: friendlyLabel(d), maxC, minC, gdd: calcGDD(toF(maxC), toF(minC), baseTempF) };
+    });
+
+    const todayEntries = (byDay[today] || []).sort((a, b) => a.h - b.h);
+
+    let currentTempC = null;
+    if (byDay[today]) {
+      let bestDiff = Infinity;
+      byDay[today].forEach(e => { const diff = Math.abs(e.h - nowETHour); if (diff < bestDiff) { bestDiff = diff; currentTempC = e.tempC; } });
+    }
+    if (currentTempC === null && sortedDays.length > 0) {
+      const last = byDay[sortedDays[sortedDays.length - 1]];
+      currentTempC = last[last.length - 1].tempC;
+    }
+
+    const todayDay = days.find(d => d.dateStr === today);
+    return {
+      currentTempC, days,
+      todayLabels: todayEntries.map(e => hourLabel(e.h)),
+      todayTempsF: todayEntries.map(e => toF1(e.tempC)),
+      todayGDD: todayDay ? todayDay.gdd : null,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Process year GDD (observed)
+  // ─────────────────────────────────────────────────────────────────────────
+  function processYearGDD(json) {
+    if (!json?.daily?.time) return { gddDates: [], gddDaily: [], tGDD: [] };
+    const dates = json.daily.time, means = json.daily.soil_temperature_0_to_7cm_mean || [];
+    let cumulative = 0;
+    const gddDates = [], gddDaily = [], tGDD = [];
+    dates.forEach((d, i) => {
+      const meanC = means[i]; if (meanC === null || meanC === undefined) return;
+      const gdd = Math.max(0, toF(meanC) - baseTempF);
+      cumulative += gdd;
+      gddDates.push(d); gddDaily.push(fmt1(gdd)); tGDD.push(fmt1(cumulative));
+    });
+    return { gddDates, gddDaily, tGDD };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Build 45-day forecast
+  // Returns arrays indexed 0..44 representing tomorrow → +45 days
+  // ─────────────────────────────────────────────────────────────────────────
+  function buildForecast(climMeans, recentArchiveJson, yearData) {
+    // Compute bias: average(observed_mean_F - clim_mean_F) over recent 14 days
+    // climMeans[0] = today, so recent archive is the 14 days *before* today.
+    // We need past-14-day climatological normals for the bias window.
+    // Simplification: use recentArchiveJson means vs the 3-year clim for those same offsets.
+    // Since we only fetched clim for "today forward", we use the year's own recent archive
+    // as observed and compute a simple bias from the last available archive values.
+    let biasF = 0;
+    if (recentArchiveJson?.daily?.time) {
+      const obsT = recentArchiveJson.daily.time;
+      const obsM = recentArchiveJson.daily.soil_temperature_0_to_7cm_mean;
+      // Match against yearData
+      const yearMap = {};
+      yearData.gddDates.forEach((d, i) => { yearMap[d] = toF(yearData.gddDates[i]); });
+
+      const diffs = [];
+      obsT.forEach((d, i) => {
+        if (obsM[i] === null) return;
+        // For bias, compare recent observed archive mean to climMeans[0] as a rough proxy
+        // Actually use the obsM vs the 3yr-prior same-period mean isn't available directly.
+        // Instead: compute bias as (recent archive mean) - (smoothed year trend extrapolated).
+        // Best simple approach: last 14 observed daily F means vs climMeans avg for those days.
+        // We use climMeans[0] (today's clim) as a rough anchor.
+        diffs.push(toF(obsM[i]));
+      });
+      if (diffs.length > 0 && climMeans[0] !== null) {
+        const recentObsMean = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+        // climMeans[0] is today's expected value; compute bias relative to it
+        biasF = recentObsMean - toF(climMeans[0] ?? climMeans.find(v => v !== null));
+        // Cap bias to ±8°F to avoid runaway extrapolation
+        biasF = Math.max(-8, Math.min(8, biasF));
+      }
+    }
+
+    // Decay the bias linearly over 30 days → 0 at day 30+
+    const today = todayStr();
+    const forecastDays = Array.from({ length: 45 }, (_, i) => {
+      const dateStr = addDays(today, i + 1); // tomorrow = offset 1
+      const clim = climMeans[i];
+      if (clim === null || clim === undefined) return null;
+      const climF = toF(clim);
+      const decayedBias = biasF * Math.max(0, 1 - (i / 30));
+      const predMeanF = climF + decayedBias;
+
+      // Seasonal half-range from climatology (use a fixed 5°F envelope — approximate diurnal range at 6cm depth)
+      // 6cm soil temp has smaller diurnal swing than surface; use 3.5°F as half-amplitude
+      const halfRange = 3.5;
+      const predMaxF  = predMeanF + halfRange;
+      const predMinF  = predMeanF - halfRange;
+      const predGDD   = Math.max(0, predMeanF - baseTempF);
+
+      return { dateStr, label: shortLabel(dateStr), predMeanF, predMaxF, predMinF, predGDD, isForecast: true };
+    }).filter(Boolean);
+
+    // Build cumulative forecast GDD starting from last observed tGDD
+    const lastTGDD = yearData.tGDD.length ? yearData.tGDD[yearData.tGDD.length - 1] : 0;
+    let cum = lastTGDD;
+    const forecastTGDD = forecastDays.map(d => { cum += d.predGDD; return fmt1(cum); });
+
+    return { forecastDays, forecastTGDD };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
+  function render(recentData, yearData, forecastData) {
+    const { currentTempC, days, todayLabels, todayTempsF, todayGDD } = recentData;
+    const { gddDates, gddDaily, tGDD } = yearData;
+    const { forecastDays, forecastTGDD } = forecastData;
+    const loc      = currentLocation;
+    const year     = new Date().getFullYear();
+    const currentF = toF1(currentTempC);
+
+    document.getElementById('locationBadge').innerHTML =
+      `◈ &nbsp;${loc.city}, ${loc.state} · ${currentLat.toFixed(4)}°N, ${Math.abs(currentLon).toFixed(4)}°W`;
+
+    [hourlyChart, historyChart, gddChart].forEach(c => { if (c) c.destroy(); });
+    hourlyChart = historyChart = gddChart = null;
+
+    const latestTGDD    = tGDD.length ? tGDD[tGDD.length - 1] : 0;
+    const projectedTGDD = forecastTGDD.length ? forecastTGDD[forecastTGDD.length - 1] : latestTGDD;
+    const todayGDDDisp  = todayGDD !== null ? todayGDD.toFixed(1) : '—';
+
+    document.getElementById('app').innerHTML = `
+      <div class="stat-row">
+        <div class="stat-card temp-card">
+          <div class="stat-label">// Current Soil Temperature</div>
+          <div class="stat-value">${currentF}<sup>°F</sup></div>
+          <div class="stat-meta">${currentTempC.toFixed(1)}°C &nbsp;·&nbsp; ${loc.city}, ${loc.state} (${loc.zip})</div>
+          <div class="stat-sub"><span class="stat-pill">6 cm depth</span></div>
+        </div>
+        <div class="stat-card gdd-card">
+          <div class="stat-label">// Today's GDD Value</div>
+          <div class="stat-value">${todayGDDDisp}<sup>GDD</sup></div>
+          <div class="stat-meta">
+            Base Temp ${baseTempF}°F &nbsp;·&nbsp; Total GDD YTD ${year}: <strong style="color:var(--leaf-light)">${latestTGDD.toFixed(1)}</strong><br>
+            Projected Total GDD +45 Days: <strong style="color:var(--forecast)">${projectedTGDD.toFixed(1)}</strong>
+          </div>
+          <div class="stat-sub"><span class="stat-pill">soil 6 cm</span><span class="forecast-badge">▸ 45-day forecast</span></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title" id="hourlyTitle">Today's Soil Temperature (hourly)</span>
+          <span class="section-sub">Hourly · °F</span>
+        </div>
+        <div class="chart-wrap"><canvas id="todayChart" height="200"></canvas></div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Soil Temperature - Past 5-Days</span>
+          <span class="section-sub">Daily max / min · °F</span>
+        </div>
+        <div class="days-grid">
+          ${days.map(d => `
+            <div class="day-card${d.label === 'Today' ? ' today' : ''}" data-date="${d.dateStr}" data-forecast="0">
+              <div class="day-name">${d.label}</div>
+              <div class="day-temp-max">${toF1(d.maxC)}°</div>
+              <div class="day-temp-min">↓ ${toF1(d.minC)}°</div>
+              <div class="day-gdd">⟁ ${d.gdd.toFixed(1)} GDD</div>
+              <div class="day-unit">°F</div>
+            </div>`).join('')}
+        </div>
+        <div class="chart-wrap"><canvas id="historyChart" height="180"></canvas></div>
+      </div>
+
+      <div class="section">
+        <div class="section-header gdd-header">
+          <span class="section-title">Cumulative Growing Degree Days — ${year}</span>
+          <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+            <span class="section-sub">Jan 1 → +45 days · base ${baseTempF}°F</span>
+            <span class="forecast-badge">▸ 45-day forecast</span>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="gddChart" height="220"></canvas></div>
+      </div>
+    `;
+
+    document.getElementById('timestamp').textContent =
+      `// fetched ${new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })} ET`;
+
+    // ── Hourly chart ──────────────────────────────────────────────────────
+    hourlyChart = new Chart(document.getElementById('todayChart'), {
+      type: 'line',
+      data: {
+        labels: todayLabels,
+        datasets: [{
+          label: 'Soil Temp (°F)',
+          data: todayTempsF,
+          borderColor: '#c4622d', backgroundColor: 'rgba(196,98,45,0.12)',
+          borderWidth: 2.5, pointRadius: 2, pointHoverRadius: 5, pointBackgroundColor: '#e07b42',
+          fill: true, tension: 0.4,
+        }]
+      },
+      options: tempChartOpts()
+    });
+
+    // ── 5-day range chart ──────────────────────────────────────────────────
+    historyChart = new Chart(document.getElementById('historyChart'), {
+      type: 'line',
+      data: {
+        labels: days.map(d => d.label),
+        datasets: [
+          { label: 'Daily Max (°F)', data: days.map(d => toF1(d.maxC)), borderColor: '#c4622d', backgroundColor: 'rgba(196,98,45,0.1)', borderWidth: 2, pointRadius: 5, pointBackgroundColor: '#e07b42', fill: '+1', tension: 0.35 },
+          { label: 'Daily Min (°F)', data: days.map(d => toF1(d.minC)), borderColor: '#8ab4c9', backgroundColor: 'rgba(138,180,201,0.08)', borderWidth: 2, pointRadius: 5, pointBackgroundColor: '#8ab4c9', fill: false, tension: 0.35 },
+        ]
+      },
+      options: tempChartOpts()
+    });
+
+    // ── tGDD chart with milestone markers ────────────────────────────────
+    // Combined observed + forecast labels/data
+    const allGDDLabels = [
+      ...gddDates.map(d => shortLabel(d)),
+      ...forecastDays.map(d => d.label)
+    ];
+
+    // Observed tGDD, then null for forecast zone
+    const obsTGDD = [...tGDD, ...Array(forecastDays.length).fill(null)];
+    // Bridge + forecast
+    const bridgeTGDD  = tGDD.length ? tGDD[tGDD.length - 1] : 0;
+    const fcTGDDBridged = [...Array(Math.max(0, tGDD.length - 1)).fill(null), bridgeTGDD, ...forecastTGDD];
+
+    // Daily GDD observed + forecast (dashed throughout)
+    const allDailyGDD = [
+      ...gddDaily,
+      ...forecastDays.map(d => fmt1(d.predGDD))
+    ];
+
+    // Milestones across full range (observed + forecast)
+    const fullTGDD = [...tGDD, ...forecastTGDD];
+    const MILESTONE_INTERVAL = 100;
+    const milestones = [];
+    let nextMs = MILESTONE_INTERVAL;
+    fullTGDD.forEach((val, i) => {
+      if (val >= nextMs) {
+        milestones.push({ index: i, value: nextMs, isForecast: i >= tGDD.length });
+        nextMs += MILESTONE_INTERVAL;
+      }
+    });
+
+    // Custom plugin for milestone markers
+    const milestonePlugin = {
+      id: 'gddMilestones',
+      afterDatasetsDraw(chart) {
+        if (!milestones.length) return;
+        const obsMeta = chart.getDatasetMeta(0);  // observed tGDD
+        const fcMeta  = chart.getDatasetMeta(1);  // forecast tGDD
+        const ctx = chart.ctx;
+
+        milestones.forEach(m => {
+          // Determine which dataset + adjusted index to use
+          let pt;
+          if (!m.isForecast) {
+            pt = obsMeta?.data[m.index];
+          } else {
+            // forecast dataset index: m.index - tGDD.length + (tGDD.length - 1) for bridge = m.index
+            pt = fcMeta?.data[m.index];
+          }
+          if (!pt || isNaN(pt.x) || isNaN(pt.y)) return;
+          const { x, y } = pt;
+          const isFc = m.isForecast;
+
+          // Glow
+          ctx.save();
+          ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2);
+          ctx.fillStyle = isFc ? 'rgba(100,160,200,0.15)' : 'rgba(107,143,62,0.2)';
+          ctx.fill(); ctx.restore();
+
+          // Dot
+          ctx.save();
+          ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+          ctx.fillStyle   = isFc ? 'rgba(130,190,230,0.9)' : '#8ab85a';
+          ctx.strokeStyle = '#2b1d0e'; ctx.lineWidth = 2;
+          ctx.fill(); ctx.stroke(); ctx.restore();
+
+          // Label pill
+          const labelY = y < chart.chartArea.top + 30 ? y + 20 : y - 14;
+          const text   = `${m.value}${isFc ? '~' : ''}`;
+          ctx.save();
+          ctx.font = '500 10px "DM Mono", monospace';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          const tw = ctx.measureText(text).width, pad = 4;
+          ctx.fillStyle = isFc ? 'rgba(10,20,35,0.85)' : 'rgba(20,30,10,0.82)';
+          ctx.beginPath(); ctx.roundRect(x - tw/2 - pad, labelY - 8, tw + pad*2, 16, 3); ctx.fill();
+          ctx.fillStyle = isFc ? 'rgba(130,190,230,0.95)' : '#8ab85a';
+          ctx.fillText(text, x, labelY); ctx.restore();
+        });
+      }
+    };
+
+    gddChart = new Chart(document.getElementById('gddChart'), {
+      type: 'line',
+      data: {
+        labels: allGDDLabels,
+        datasets: [
+          {
+            label: `tGDD observed (base ${baseTempF}°F)`,
+            data: obsTGDD,
+            borderColor: '#6b8f3e', backgroundColor: 'rgba(107,143,62,0.15)',
+            borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#8ab85a',
+            fill: true, tension: 0.4,
+          },
+          {
+            label: `tGDD forecast`,
+            data: fcTGDDBridged,
+            borderColor: 'rgba(100,160,200,0.85)', backgroundColor: 'rgba(100,160,200,0.07)',
+            borderWidth: 2, borderDash: [6, 4],
+            pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: 'rgba(130,190,230,0.9)',
+            fill: true, tension: 0.4,
+          },
+          {
+            label: `Daily GDD`,
+            data: allDailyGDD,
+            borderColor: 'rgba(138,184,90,0.45)', backgroundColor: 'transparent',
+            borderWidth: 1.5, borderDash: [3, 3],
+            pointRadius: 0, pointHoverRadius: 3,
+            fill: false, tension: 0.3,
+          },
+        ]
+      },
+      plugins: [milestonePlugin],
+      options: gddChartOpts(tGDD.length) // pass split index for shading
+    });
+
+    // ── Day card clicks ───────────────────────────────────────────────────
+    const today = todayStr();
+    document.querySelectorAll('.day-card').forEach(card => {
+      card.addEventListener('click', () => selectDay(card.dataset.date, days));
+    });
+    const todayCard = document.querySelector(`.day-card[data-date="${today}"]`);
+    if (todayCard) todayCard.classList.add('selected');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // selectDay (observed)
+  // ─────────────────────────────────────────────────────────────────────────
+  function selectDay(dateStr, days) {
+    document.querySelectorAll('.day-card').forEach(c => c.classList.remove('selected'));
+    document.querySelector(`.day-card[data-date="${dateStr}"]`)?.classList.add('selected');
+
+    const entries = (byDay[dateStr] || []).slice().sort((a, b) => a.h - b.h);
+    const dayInfo = days.find(d => d.dateStr === dateStr);
+    const titleEl = document.getElementById('hourlyTitle');
+    if (titleEl && dayInfo) titleEl.textContent = dayInfo.label === 'Today' ? "Today's Soil Temperature" : `${dayInfo.label} Soil Temperature`;
+
+    if (hourlyChart) {
+      hourlyChart.data.labels = entries.map(e => hourLabel(e.h));
+      hourlyChart.data.datasets[0].data = entries.map(e => toF1(e.tempC));
+      hourlyChart.data.datasets[0].borderColor = '#c4622d';
+      hourlyChart.data.datasets[0].backgroundColor = 'rgba(196,98,45,0.12)';
+      hourlyChart.update('active');
+    }
+    document.getElementById('todayChart')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // selectForecastDay — synthesize a smooth diurnal curve from predicted mean±range
+  // ─────────────────────────────────────────────────────────────────────────
+  function selectForecastDay(dateStr, forecastDays, observedDays) {
+    document.querySelectorAll('.day-card').forEach(c => c.classList.remove('selected'));
+    document.querySelector(`.day-card[data-date="${dateStr}"]`)?.classList.add('selected');
+
+    const fd = forecastDays.find(d => d.dateStr === dateStr);
+    if (!fd) return;
+
+    const titleEl = document.getElementById('hourlyTitle');
+    if (titleEl) titleEl.textContent = `${fd.label} Soil Temperature (Forecast)`;
+
+    // Synthesize a sinusoidal diurnal curve:
+    // min at ~5am, max at ~2pm, mean is (max+min)/2
+    const hours = Array.from({ length: 24 }, (_, h) => h);
+    const mean = fd.predMeanF, amp = (fd.predMaxF - fd.predMinF) / 2;
+    const synth = hours.map(h => {
+      // Phase: peak at hour 14 (2pm), trough at hour 5 (5am)
+      const phase = ((h - 14) / 24) * 2 * Math.PI;
+      return fmt1(mean + amp * Math.cos(phase));
+    });
+
+    if (hourlyChart) {
+      hourlyChart.data.labels = hours.map(h => hourLabel(h));
+      hourlyChart.data.datasets[0].data = synth;
+      hourlyChart.data.datasets[0].borderColor = 'rgba(100,160,200,0.9)';
+      hourlyChart.data.datasets[0].backgroundColor = 'rgba(100,160,200,0.1)';
+      hourlyChart.update('active');
+    }
+    document.getElementById('todayChart')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Chart options
+  // ─────────────────────────────────────────────────────────────────────────
+  function tempChartOpts() {
+    return {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#a08060', font: { family: 'DM Mono', size: 10 }, boxWidth: 12 } },
+        tooltip: {
+          backgroundColor: 'rgba(20,12,5,0.95)', borderColor: 'rgba(196,98,45,0.4)', borderWidth: 1,
+          titleColor: '#e07b42', bodyColor: '#f5ead8',
+          titleFont: { family: 'DM Mono', size: 11 }, bodyFont: { family: 'DM Mono', size: 11 },
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}°F` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#7a5c3e', font: { family: 'DM Mono', size: 10 }, maxRotation: 45, maxTicksLimit: 14 }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(196,98,45,0.2)' } },
+        y: { ticks: { color: '#7a5c3e', font: { family: 'DM Mono', size: 10 }, callback: v => `${v}°F` }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(196,98,45,0.2)' } }
+      }
+    };
+  }
+
+  function gddChartOpts(obsSplitIdx) {
+    return {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#a08060', font: { family: 'DM Mono', size: 10 }, boxWidth: 12 } },
+        tooltip: {
+          backgroundColor: 'rgba(10,18,5,0.95)', borderColor: 'rgba(107,143,62,0.45)', borderWidth: 1,
+          titleColor: '#8ab85a', bodyColor: '#f5ead8',
+          titleFont: { family: 'DM Mono', size: 11 }, bodyFont: { family: 'DM Mono', size: 11 },
+          filter: item => item.parsed.y !== null,
+          callbacks: {
+            label: ctx => ctx.parsed.y !== null ? ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} GDD` : null
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#5a7040', font: { family: 'DM Mono', size: 10 }, maxRotation: 45, maxTicksLimit: 18 },
+          grid: { color: 'rgba(255,255,255,0.03)' }, border: { color: 'rgba(107,143,62,0.25)' }
+        },
+        y: {
+          ticks: { color: '#5a7040', font: { family: 'DM Mono', size: 10 }, callback: v => `${v}`, stepSize: 100 },
+          grid: {
+            color: ctx => ctx.tick.value % 100 === 0 ? 'rgba(107,143,62,0.18)' : 'rgba(255,255,255,0.03)',
+            lineWidth: ctx => ctx.tick.value % 100 === 0 ? 1.5 : 1,
+          },
+          border: { color: 'rgba(107,143,62,0.25)' },
+          title: { display: true, text: 'Cumulative GDD', color: '#5a7040', font: { family: 'DM Mono', size: 10 } }
+        }
+      }
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Load & render
+  // ─────────────────────────────────────────────────────────────────────────
+  async function loadAndRender() {
+    document.getElementById('app').innerHTML =
+      `<div class="status"><div class="loader"></div>Fetching soil data & building forecast…</div>`;
+    try {
+      const bVal = parseFloat(document.getElementById('baseInput').value);
+      if (!isNaN(bVal)) baseTempF = bVal;
+
+      const [recentJson, yearJson, climMeans, recentArchiveJson] = await Promise.all([
+        fetchRecent(currentLat, currentLon),
+        fetchYearData(currentLat, currentLon),
+        fetchClimatology(currentLat, currentLon),
+        fetchRecentArchive(currentLat, currentLon),
+      ]);
+
+      const recentData = processRecent(recentJson);
+      if (recentData.currentTempC === null) throw new Error('No temperature data found for this location.');
+
+      const yearData     = processYearGDD(yearJson);
+      const forecastData = buildForecast(climMeans, recentArchiveJson, yearData);
+      render(recentData, yearData, forecastData);
+
+    } catch (err) {
+      document.getElementById('app').innerHTML = `
+        <div class="error-box">⚠ <strong>Failed to load data</strong><br><br>${err.message}<br><br>
+        Make sure you have an active internet connection. Check the browser console (F12) for details.</div>`;
+      console.error('[Soil Temp App]', err);
+    }
+  }
+
+  loadAndRender();
+</script>
+</body>
+</html>

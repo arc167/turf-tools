@@ -1,0 +1,1834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+  <title>r/LawnAnswers Turf Intelligence Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --soil:    #2c1a0e;
+  --loam:    #4a2e1a;
+  --earth:   #7a5c3c;
+  --clay:    #b8864e;
+  --straw:   #d4a85a;
+  --wheat:   #f0c97a;
+  --cream:   #faf5eb;
+  --leaf:    #5c7a3c;
+  --sprout:  #8ab56a;
+  --dew:     #6ab5a0;
+  --text:    #1a0f08;
+  --muted:   #7a6248;
+  --card-bg: #ffffff;
+  --border:  rgba(74,46,26,0.11);
+}
+
+body {
+  background: var(--cream);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse at 15% 85%, rgba(74,46,26,0.07) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 10%, rgba(92,122,60,0.05) 0%, transparent 50%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 0;
+}
+
+.page { max-width: 980px; margin: 0 auto; padding: 44px 24px 64px; position: relative; z-index: 1; }
+
+/* Header */
+.header { margin-bottom: 40px; }
+.eyebrow { font-family: 'DM Mono', monospace; font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--earth); margin-bottom: 6px; }
+h1 { font-family: 'Playfair Display', serif; font-size: clamp(2.4rem, 5.5vw, 3.8rem); color: var(--soil); line-height: 1.05; letter-spacing: -0.02em; }
+h1 em { color: var(--leaf); font-style: italic; }
+
+/* Search bar */
+.search-bar {
+  display: flex; gap: 10px; align-items: stretch;
+  background: var(--card-bg); border: 1.5px solid var(--border);
+  border-radius: 14px; padding: 14px 16px;
+  box-shadow: 0 2px 16px rgba(44,26,14,0.06);
+  margin-bottom: 10px; flex-wrap: wrap;
+}
+.input-field { flex: 1; min-width: 100px; display: flex; flex-direction: column; gap: 4px; }
+.input-field label { font-family: 'DM Mono', monospace; font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--earth); }
+.input-field input {
+  background: var(--cream); border: 1.5px solid var(--border);
+  border-radius: 9px; padding: 10px 13px;
+  font-family: 'DM Mono', monospace; font-size: 15px;
+  color: var(--soil); outline: none; width: 100%;
+  transition: border-color 0.18s, box-shadow 0.18s; letter-spacing: 0.08em;
+}
+.input-field input:focus { border-color: var(--leaf); box-shadow: 0 0 0 3px rgba(92,122,60,0.13); }
+.input-field.narrow { flex: 0 0 140px; }
+.btn-load {
+  align-self: flex-end; background: var(--soil); color: var(--wheat);
+  border: none; border-radius: 9px; padding: 10px 22px; cursor: pointer;
+  font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.1em;
+  transition: background 0.18s, transform 0.1s; white-space: nowrap; height: 42px;
+}
+.btn-load:hover { background: var(--loam); }
+.btn-load:active { transform: scale(0.97); }
+.btn-load:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.loc-badge { display: none; align-items: center; gap: 8px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-bottom: 28px; margin-top: 2px; }
+.loc-badge.visible { display: flex; }
+.loc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--leaf); flex-shrink: 0; box-shadow: 0 0 0 3px rgba(92,122,60,0.2); }
+
+.err { font-size: 12.5px; color: #b03030; margin-top: 6px; display: none; font-family: 'DM Mono', monospace; }
+.err.visible { display: block; }
+.progress-status { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--earth); margin-top: 6px; min-height: 18px; }
+
+/* Section title */
+.section-title { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 700; color: var(--soil); margin-bottom: 24px; letter-spacing: -0.02em; border-left: 5px solid var(--clay); padding-left: 16px; line-height: 1.15; }
+
+/* Conditions card */
+.conditions-card {
+  background: var(--card-bg); border: 1.5px solid var(--border);
+  border-radius: 16px; padding: 28px 32px;
+  box-shadow: 0 2px 18px rgba(44,26,14,0.06); margin-bottom: 32px;
+  opacity: 0; transform: translateY(10px);
+  transition: opacity 0.45s, transform 0.45s;
+  position: relative; overflow: hidden;
+}
+.conditions-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--leaf) 0%, var(--dew) 50%, var(--sprout) 100%); }
+.conditions-card.visible { opacity: 1; transform: translateY(0); }
+.cond-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+@media (max-width: 640px) { .cond-grid { grid-template-columns: repeat(2,1fr); } }
+.cond-item { padding: 12px 20px 12px 0; border-right: 1px solid var(--border); }
+.cond-item:last-child { border-right: none; }
+.cond-label { font-family: 'DM Mono', monospace; font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.cond-val { font-family: 'Playfair Display', serif; font-size: 2.1rem; color: var(--soil); line-height: 1; font-weight: 700; }
+.cond-unit { font-family: 'DM Sans', sans-serif; font-size: 12px; color: var(--muted); margin-top: 5px; }
+.cond-icon { font-size: 1.3rem; margin-bottom: 8px; }
+.weather-chip { display: inline-block; background: var(--cream); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 11px; color: var(--earth); font-family: 'DM Mono', monospace; letter-spacing: 0.06em; margin-top: 16px; }
+.temp-pair { display: flex; align-items: flex-start; gap: 0; margin-top: 0; }
+.temp-half { flex: 1; }
+.wx-pair { display: flex; align-items: flex-start; gap: 0; height: 100%; }
+.wx-half { flex: 1; }
+.wx-half-cond { padding-right: 10px; }
+.wx-half-precip { padding-left: 2px; }
+.cond-val-wx { font-size: 0.95rem; line-height: 1.25; margin-top: 4px; }
+.wind-pair { display: flex; align-items: flex-start; gap: 0; margin-top: 0; }
+.wind-half { flex: 1; }
+.wind-divider { width: 1px; background: var(--border); margin: 0 12px; align-self: stretch; }
+.wind-sub-label { font-family: 'DM Mono', monospace; font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; opacity: 0.7; }
+
+/* Chart panel */
+.chart-panel {
+  background: var(--card-bg); border: 1.5px solid var(--border);
+  border-radius: 16px; padding: 28px 28px 24px;
+  box-shadow: 0 2px 18px rgba(44,26,14,0.06);
+  opacity: 0; transform: translateY(10px);
+  transition: opacity 0.45s 0.1s, transform 0.45s 0.1s;
+}
+.chart-panel.visible { opacity: 1; transform: translateY(0); }
+.chart-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+.chart-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.08em; }
+.chart-legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 18px; }
+.legend-item { display: flex; align-items: center; gap: 7px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.06em; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.chart-wrap { position: relative; height: 300px; }
+.forecast-note { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--straw); margin-top: 10px; text-align: right; letter-spacing: 0.05em; }
+
+/* 5-day soil history cards */
+.soil-day-row {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+  margin-bottom: 20px;
+}
+@media (max-width: 700px) { .soil-day-row { grid-template-columns: repeat(3,1fr); } }
+@media (max-width: 480px) { .soil-day-row { grid-template-columns: repeat(2,1fr); } }
+.soil-day-card {
+  background: var(--card-bg); border: 1.5px solid var(--border);
+  border-radius: 12px; padding: 14px 16px;
+  box-shadow: 0 1px 8px rgba(44,26,14,0.05);
+  position: relative; overflow: hidden;
+}
+.soil-day-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--clay), var(--straw));
+}
+.soil-day-card.is-today::before {
+  background: linear-gradient(90deg, var(--leaf), var(--sprout));
+}
+.soil-day-name {
+  font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+}
+.soil-day-name.is-today { color: var(--leaf); font-weight: 500; }
+.soil-day-temps {
+  display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px;
+}
+.soil-day-high {
+  font-family: 'Playfair Display', serif; font-size: 1.45rem;
+  color: var(--soil); font-weight: 700; line-height: 1;
+}
+.soil-day-low {
+  font-family: 'Playfair Display', serif; font-size: 1rem;
+  color: var(--muted); font-weight: 400; line-height: 1;
+}
+.soil-day-unit {
+  font-family: 'DM Sans', sans-serif; font-size: 10px; color: var(--muted);
+}
+.soil-day-gdd {
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--earth);
+  margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border);
+}
+.soil-day-gdd span {
+  font-family: 'Playfair Display', serif; font-size: 0.95rem;
+  color: var(--leaf); font-weight: 700; margin-left: 4px;
+}
+
+/* GDD stat row — 4 cards */
+.gdd-stat-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+  margin-bottom: 24px; opacity: 0; transform: translateY(10px);
+  transition: opacity 0.45s 0.05s, transform 0.45s 0.05s;
+}
+.gdd-stat-row.visible { opacity: 1; transform: translateY(0); }
+@media (max-width: 700px) { .gdd-stat-row { grid-template-columns: repeat(2,1fr); } }
+
+.gdd-stat {
+  background: var(--card-bg); border: 1.5px solid var(--border);
+  border-radius: 14px; padding: 20px 22px;
+  box-shadow: 0 2px 12px rgba(44,26,14,0.05);
+  position: relative; overflow: hidden;
+}
+.gdd-stat::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.gdd-stat.s-airtemp::before  { background: linear-gradient(90deg,#6ab5a0,#c8dde8); }
+.gdd-stat.s-soiltemp::before { background: linear-gradient(90deg,#b8864e,#d4a85a); }
+.gdd-stat.s-todaygdd::before { background: linear-gradient(90deg,#5c7a3c,#8ab56a); }
+.gdd-stat.s-totalgdd::before { background: linear-gradient(90deg,#d4a85a,#f0c97a); }
+
+.gdd-stat-label { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.gdd-stat-val { font-family: 'Playfair Display', serif; font-size: 2.2rem; color: var(--soil); line-height: 1; font-weight: 700; }
+.gdd-stat-sub { font-family: 'DM Sans', sans-serif; font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+/* GDD chart */
+.gdd-chart-wrap { position: relative; height: 380px; }
+
+/* Loader */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(92,122,60,0.25); border-top-color: var(--leaf); border-radius: 50%; animation: spin 0.65s linear infinite; vertical-align: middle; margin-right: 5px; }
+
+footer { margin-top: 48px; text-align: center; font-size: 11px; color: var(--earth); opacity: 0.55; font-family: 'DM Mono', monospace; }
+footer a { color: inherit; }
+
+/* Frost & Freeze Window cards */
+.sc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 680px) { .sc-grid { grid-template-columns: 1fr; } }
+
+.sc-card {
+  background: var(--card-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 22px 20px;
+  box-shadow: 0 2px 16px rgba(44,26,14,0.06);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.sc-top-bar {
+  position: absolute; top: 0; left: 0; right: 0; height: 4px;
+}
+.sc-bar-spring  { background: linear-gradient(90deg, #6ab5a0, #8ecc7a); }
+.sc-bar-summer  { background: linear-gradient(90deg, #d4a85a, #f0c97a, #d4a85a); }
+.sc-bar-fall    { background: linear-gradient(90deg, #b8864e, #d4a85a); }
+
+.sc-icon { font-size: 2rem; margin: 8px 0 10px; }
+.sc-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 12px; line-height: 1.5;
+}
+.sc-date {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.7rem; font-weight: 700;
+  color: var(--soil); line-height: 1.1;
+  margin-bottom: 4px;
+}
+.sc-date-days {
+  font-size: 2.2rem;
+}
+.sc-divider {
+  width: 40px; height: 1px;
+  background: var(--border);
+  margin: 14px auto;
+}
+.sc-sub-row {
+  display: flex; gap: 16px; justify-content: center; width: 100%;
+}
+.sc-sub-block { flex: 1; }
+.sc-sub-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 4px;
+}
+.sc-sub-val {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px; color: var(--earth); font-weight: 500;
+}
+.sc-sub-warn { color: #b86b3a; }
+.sc-window-range {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px; color: var(--muted);
+  letter-spacing: 0.06em; line-height: 1.6;
+}
+
+.sc-narrative {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem; color: var(--earth);
+  line-height: 1.75; padding: 20px 24px;
+  background: var(--card-bg); border: 1.5px solid var(--border);
+  border-radius: 12px; margin-bottom: 10px;
+}
+.sc-narrative strong { color: var(--soil); }
+.sc-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px; letter-spacing: 0.08em;
+  color: var(--muted); opacity: 0.65;
+  text-align: right;
+}
+
+/* preGDD section */
+.pregdd-stat-row {
+  display: grid; grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 16px; margin-bottom: 24px;
+}
+@media (max-width: 600px) { .pregdd-stat-row { grid-template-columns: 1fr; } }
+.pregdd-stat {
+  background: var(--card-bg); border: 1.5px solid var(--border);
+  border-radius: 16px; padding: 22px 20px 18px;
+  text-align: center; position: relative; overflow: hidden;
+}
+.pregdd-stat::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, #8ab4c9, #6ab5a0);
+}
+.pregdd-stat-window::before {
+  background: linear-gradient(90deg, #6ab5a0, #8ecc7a, #6ab5a0);
+}
+.pregdd-stat-label {
+  font-family: 'DM Mono', monospace; font-size: 9px;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 10px;
+}
+.pregdd-stat-val {
+  font-family: 'Playfair Display', serif; font-size: 1.65rem;
+  font-weight: 700; color: var(--soil); line-height: 1.1; margin-bottom: 6px;
+}
+.pregdd-window-val { font-size: 2.1rem; color: #6ab5a0; }
+.pregdd-stat-sub {
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted);
+}
+
+/* Herbicide Applications - combined card */
+.pregdd-combined-card {
+  background: var(--card-bg); border: 1.5px solid var(--border);
+  border-radius: 16px; padding: 28px 32px 24px;
+  position: relative; overflow: hidden; margin-bottom: 20px;
+}
+.pregdd-combined-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  background: linear-gradient(90deg, #8ab4c9, #6ab5a0, #8ecc7a);
+}
+.pregdd-combined-inner {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+@media (max-width: 620px) {
+  .pregdd-combined-inner { flex-direction: column; }
+  .pregdd-combined-arrow { transform: rotate(90deg); }
+}
+.pregdd-combined-block { flex: 1; text-align: center; }
+.pregdd-combined-center { flex: 0.8; }
+.pregdd-combined-label {
+  font-family: 'DM Mono', monospace; font-size: 9px;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 10px;
+}
+.pregdd-combined-val {
+  font-family: 'Playfair Display', serif; font-size: 1.65rem;
+  font-weight: 700; color: var(--soil); line-height: 1.1; margin-bottom: 6px;
+}
+.pregdd-combined-days {
+  font-family: 'Playfair Display', serif; font-size: 2.2rem;
+  font-weight: 700; color: #6ab5a0; line-height: 1; margin-bottom: 6px;
+}
+.pregdd-combined-sub {
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted);
+}
+.pregdd-combined-arrow {
+  font-size: 1.4rem; color: var(--muted); opacity: 0.5; flex-shrink: 0; padding: 0 4px;
+}
+
+/* Herbicide sub-titles */
+.herb-subtitle {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.15rem; font-weight: 700;
+  color: var(--soil); margin-bottom: 4px; margin-top: 8px;
+}
+.herb-subtitle-meta {
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 16px;
+}
+.pregdd-combined-card-dmi::before {
+  background: linear-gradient(90deg, #b8864e, #d4a85a, #f0c97a) !important;
+}
+.pregdd-combined-card-dmi .pregdd-combined-days { color: #d4a85a; }
+
+/* Seeding window card */
+.seed-card-fall::before {
+  background: linear-gradient(90deg, #b8864e, #c4622d, #d4a85a) !important;
+}
+.seed-days-fall {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.2rem; font-weight: 700;
+  color: #c4622d; line-height: 1; margin-bottom: 6px;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="eyebrow">r/LawnAnswers</div>
+    <h1>Turf <em>Intelligence</em> Tool</h1>
+  </div>
+
+  <!-- Input bar -->
+  <div class="search-bar">
+    <div class="input-field">
+      <label for="zipInput">ZIP Code</label>
+      <input type="text" id="zipInput" placeholder="e.g. 20500" maxlength="5" inputmode="numeric" />
+    </div>
+    <div class="input-field narrow">
+      <label for="baseTempInput">GDD Base Temp (°F)</label>
+      <input type="number" id="baseTempInput" value="50" step="1" min="-50" max="100" />
+    </div>
+    <button class="btn-load" id="loadBtn" onclick="loadData()">Load</button>
+  </div>
+  <div class="err" id="errMsg"></div>
+  <div class="progress-status" id="progressStatus"></div>
+
+  <div class="loc-badge" id="locBadge">
+    <span class="loc-dot"></span>
+    <span id="locText"></span>
+  </div>
+
+  <!-- Current Conditions -->
+  <div id="conditionsSection" style="display:none">
+    <div class="section-title">Current Conditions</div>
+    <div class="conditions-card" id="condCard">
+      <div class="cond-grid">
+        <div class="cond-item cond-item-temp">
+          <div class="cond-icon">🌡️</div>
+          <div class="cond-label">Temperature</div>
+          <div class="temp-pair">
+            <div class="temp-half">
+              <div class="wind-sub-label">Actual</div>
+              <div class="cond-val" id="cTemp">—</div>
+              <div class="cond-unit">°F</div>
+            </div>
+            <div class="wind-divider"></div>
+            <div class="temp-half">
+              <div class="wind-sub-label">Feels Like</div>
+              <div class="cond-val" id="cApparent">—</div>
+              <div class="cond-unit">°F</div>
+            </div>
+          </div>
+        </div>
+        <div class="cond-item cond-item-humidity">
+          <div class="cond-icon">💧</div>
+          <div class="cond-label">Humidity</div>
+          <div class="temp-pair">
+            <div class="temp-half">
+              <div class="wind-sub-label">Relative</div>
+              <div class="cond-val" id="cHumid">—</div>
+              <div class="cond-unit">%</div>
+            </div>
+            <div class="wind-divider"></div>
+            <div class="temp-half">
+              <div class="wind-sub-label">Dew Point</div>
+              <div class="cond-val" id="cDewpoint">—</div>
+              <div class="cond-unit">°F</div>
+            </div>
+          </div>
+        </div>
+        <div class="cond-item cond-item-wind">
+          <div class="cond-icon">💨</div>
+          <div class="cond-label">Wind (10m)</div>
+          <div class="wind-pair">
+            <div class="wind-half">
+              <div class="wind-sub-label">Speed</div>
+              <div class="cond-val" id="cWind">—</div>
+              <div class="cond-unit">mph</div>
+            </div>
+            <div class="wind-divider"></div>
+            <div class="wind-half">
+              <div class="wind-sub-label">Gusts</div>
+              <div class="cond-val" id="cGust">—</div>
+              <div class="cond-unit">mph</div>
+            </div>
+          </div>
+        </div>
+        <div class="cond-item cond-item-wx">
+          <div class="wx-pair">
+            <div class="wx-half wx-half-cond">
+              <div class="cond-icon" id="cWeatherIcon">🌤️</div>
+              <div class="cond-label">Conditions</div>
+              <div class="cond-val cond-val-wx" id="cWeatherDesc">—</div>
+            </div>
+            <div class="wind-divider"></div>
+            <div class="wx-half wx-half-precip">
+              <div class="cond-icon">🌧️</div>
+              <div class="cond-label">Precip. Prob.</div>
+              <div class="cond-val" id="cPrecipProb">—</div>
+              <div class="cond-unit">%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Freeze Dates Section -->
+  <div id="freezeSection" style="display:none; margin-top: 40px;">
+    <div class="section-title">Climatology</div>
+
+    <!-- Sub-header: Frost & Freeze Window -->
+    <div class="herb-subtitle">Frost &amp; Freeze Window</div>
+    <div class="herb-subtitle-meta">Based on 10-year historical daily minimum air temperature · 10% = possible · 50% = typical</div>
+
+    <div class="sc-grid">
+
+      <!-- Spring freeze card -->
+      <div class="sc-card sc-card-spring">
+        <div class="sc-top-bar sc-bar-spring"></div>
+        <div class="sc-icon">🌱</div>
+        <div class="sc-label">Last Spring Freeze</div>
+        <div class="sc-date" id="fLastSpring">—</div>
+        <div class="sc-divider"></div>
+        <div class="sc-sub-row">
+          <div class="sc-sub-block">
+            <div class="sc-sub-label">Typical (50%)</div>
+            <div class="sc-sub-val" id="fLastSpring50">—</div>
+          </div>
+          <div class="sc-sub-block">
+            <div class="sc-sub-label">Possible (10%)</div>
+            <div class="sc-sub-val sc-sub-warn" id="fLastSpringSub">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Frost-free center card -->
+      <div class="sc-card sc-card-summer">
+        <div class="sc-top-bar sc-bar-summer"></div>
+        <div class="sc-icon">☀️</div>
+        <div class="sc-label">Frost-Free Growing Window</div>
+        <div class="sc-date sc-date-days" id="fFrostFree">—</div>
+        <div class="sc-divider"></div>
+        <div class="sc-window-range" id="fFrostFreeSub">—</div>
+      </div>
+
+      <!-- Fall freeze card -->
+      <div class="sc-card sc-card-fall">
+        <div class="sc-top-bar sc-bar-fall"></div>
+        <div class="sc-icon">🍂</div>
+        <div class="sc-label">First Fall Freeze</div>
+        <div class="sc-date" id="fFirstFall">—</div>
+        <div class="sc-divider"></div>
+        <div class="sc-sub-row">
+          <div class="sc-sub-block">
+            <div class="sc-sub-label">Typical (50%)</div>
+            <div class="sc-sub-val" id="fFirstFall50">—</div>
+          </div>
+          <div class="sc-sub-block">
+            <div class="sc-sub-label">Possible (10%)</div>
+            <div class="sc-sub-val sc-sub-warn" id="fFirstFallSub">—</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Narrative row -->
+    <div class="sc-narrative" id="freezeNarrative"></div>
+    <div class="sc-meta" id="freezeMeta"></div>
+
+    <!-- Sub-header: Seeding Windows -->
+    <div class="herb-subtitle" style="margin-top:32px;">Fall Overseeding Window</div>
+    <div class="herb-subtitle-meta">Optimal seeding window based on historical first fall freeze</div>
+
+    <!-- Fall Overseed card -->
+    <div class="pregdd-combined-card seed-card-fall" id="fallOverseedCard">
+      <div class="pregdd-combined-inner">
+        <div class="pregdd-combined-block">
+          <div class="pregdd-combined-label">Fall Overseed Opens</div>
+          <div class="pregdd-combined-val" id="seedFallOpen">—</div>
+          <div class="pregdd-combined-sub">6 weeks before first fall freeze</div>
+        </div>
+        <div class="pregdd-combined-arrow">→</div>
+        <div class="pregdd-combined-block pregdd-combined-center">
+          <div class="pregdd-combined-label">Window</div>
+          <div class="pregdd-combined-days seed-days-fall">10 days</div>
+          <div class="pregdd-combined-sub" id="seedFallRange"></div>
+        </div>
+        <div class="pregdd-combined-arrow">→</div>
+        <div class="pregdd-combined-block">
+          <div class="pregdd-combined-label">Fall Overseed Closes</div>
+          <div class="pregdd-combined-val" id="seedFallClose">—</div>
+          <div class="pregdd-combined-sub">~5.5 weeks before first fall freeze</div>
+        </div>
+      </div>
+    </div>
+    <div class="sc-narrative" id="seedFallNarrative"></div>
+  </div>
+
+
+  <!-- Soil & ET Chart -->
+  <div id="chartSection" style="display:none; margin-top: 8px;">
+    <div class="section-title">Soil &amp; Evapotranspiration · 5 Days Past + 3 Day Forecast</div>
+    <div class="soil-day-row" id="soilDayRow"></div>
+
+    <div class="chart-panel" id="chartPanel">
+      <div class="chart-header">
+        <div class="chart-meta" id="chartMeta"></div>
+      </div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#5c7a3c"></div>ET₀ (mm/hr)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#b8864e"></div>Soil Temp 6cm (°F)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#6ab5a0"></div>Soil Moisture 0–1cm (m³/m³)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(212,168,90,0.5);width:12px;height:12px;border-radius:2px;border:1px dashed #d4a85a"></div>Forecast zone</div>
+      </div>
+      <div class="chart-wrap"><canvas id="soilChart"></canvas></div>
+      <div class="forecast-note">Dashed line = forecast boundary →</div>
+    </div>
+  </div>
+
+  <!-- GDD Section -->
+  <div id="gddSection" style="display:none; margin-top: 40px;">
+    <div class="section-title">Growing Degree Days</div>
+
+    <!-- 4 stat cards -->
+    <div class="gdd-stat-row" id="gddStatRow">
+      <div class="gdd-stat s-airtemp">
+        <div class="gdd-stat-label">Today's High Air Temp</div>
+        <div class="gdd-stat-val" id="gAirHigh">—</div>
+        <div class="gdd-stat-sub">°F</div>
+      </div>
+      <div class="gdd-stat s-soiltemp">
+        <div class="gdd-stat-label">Today's Soil Temp (6cm)</div>
+        <div class="gdd-stat-val" id="gSoilTemp">—</div>
+        <div class="gdd-stat-sub">°F (current reading)</div>
+      </div>
+      <div class="gdd-stat s-todaygdd">
+        <div class="gdd-stat-label">Today's GDD</div>
+        <div class="gdd-stat-val" id="gTodayGDD">—</div>
+        <div class="gdd-stat-sub">degree days · base <span id="gBaseLbl">—</span>°F</div>
+      </div>
+      <div class="gdd-stat s-totalgdd">
+        <div class="gdd-stat-label">Cumulative tGDD (YTD)</div>
+        <div class="gdd-stat-val" id="gTotalGDD">—</div>
+        <div class="gdd-stat-sub">since Jan 1</div>
+      </div>
+    </div>
+
+    <!-- tGDD chart -->
+    <div class="chart-panel" id="gddChartPanel">
+      <div class="chart-header">
+        <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--soil)">
+          Daily GDD &amp; Cumulative tGDD — <span id="gddYear"></span>
+        </div>
+        <div class="chart-meta" id="gddChartMeta"></div>
+      </div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#d4a85a;border-radius:2px"></div>Daily GDD (left axis)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#5c7a3c"></div>Cumulative tGDD (right axis)</div>
+      </div>
+      <div class="gdd-chart-wrap"><canvas id="gddChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- preGDD Section -->
+  <div id="pregddSection" style="display:none; margin-top: 40px;">
+    <div class="section-title">Herbicide Applications <span style="font-size:1rem;font-weight:400;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:0.05em;">(historical average · soil 0–7 cm)</span></div>
+
+    <!-- Sub-title: Pre-Emergent -->
+    <div class="herb-subtitle">First Pre-Emergent Application Window</div>
+    <div class="herb-subtitle-meta">Cumulative preGDD 250–500 · base 32°F</div>
+
+    <!-- Pre-emergent combined card -->
+    <div class="pregdd-combined-card" id="pregddStatRow">
+      <div class="pregdd-combined-inner">
+        <div class="pregdd-combined-block">
+          <div class="pregdd-combined-label">Application Window Opens</div>
+          <div class="pregdd-combined-val" id="pg250date">—</div>
+          <div class="pregdd-combined-sub">250 preGDD · soil warming begins</div>
+        </div>
+        <div class="pregdd-combined-arrow">→</div>
+        <div class="pregdd-combined-block pregdd-combined-center">
+          <div class="pregdd-combined-label">Target Window</div>
+          <div class="pregdd-combined-days" id="pgWindowDays">—</div>
+          <div class="pregdd-combined-sub" id="pgWindowRange"></div>
+        </div>
+        <div class="pregdd-combined-arrow">→</div>
+        <div class="pregdd-combined-block">
+          <div class="pregdd-combined-label">Application Window Closes</div>
+          <div class="pregdd-combined-val" id="pg500date">—</div>
+          <div class="pregdd-combined-sub">500 preGDD · soil too warm</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Narrative -->
+    <div class="sc-narrative" id="pregddNarrative"></div>
+
+    <!-- Sub-title: DMI -->
+    <div class="herb-subtitle" style="margin-top:32px;">Pre-Season DMI Window</div>
+    <div class="herb-subtitle-meta">Cumulative dmiGDD 140–175 · base 50°F</div>
+
+    <!-- DMI combined card -->
+    <div class="pregdd-combined-card pregdd-combined-card-dmi" id="dmiStatRow">
+      <div class="pregdd-combined-inner">
+        <div class="pregdd-combined-block">
+          <div class="pregdd-combined-label">DMI Window Opens</div>
+          <div class="pregdd-combined-val" id="dmi140date">—</div>
+          <div class="pregdd-combined-sub">140 dmiGDD · begin monitoring</div>
+        </div>
+        <div class="pregdd-combined-arrow">→</div>
+        <div class="pregdd-combined-block pregdd-combined-center">
+          <div class="pregdd-combined-label">Target Window</div>
+          <div class="pregdd-combined-days" id="dmiWindowDays">—</div>
+          <div class="pregdd-combined-sub" id="dmiWindowRange"></div>
+        </div>
+        <div class="pregdd-combined-arrow">→</div>
+        <div class="pregdd-combined-block">
+          <div class="pregdd-combined-label">DMI Window Closes</div>
+          <div class="pregdd-combined-val" id="dmi175date">—</div>
+          <div class="pregdd-combined-sub">175 dmiGDD · optimal window ends</div>
+        </div>
+      </div>
+    </div>
+    <div class="sc-narrative" id="dmiNarrative"></div>
+
+    <!-- Chart -->
+    <div class="chart-panel" id="pregddChartPanel" style="margin-top:20px;">
+      <div class="chart-header">
+        <div style="font-family:'Playfair Display',serif;font-size:1.05rem;color:var(--soil)">
+          Cumulative preGDD — Jan 1 → Jun 30 &nbsp;<span style="font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--muted)">10-year historical average · base 32°F</span>
+        </div>
+      </div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#8ab4c9"></div>Cumulative preGDD</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(106,181,160,0.6);border-radius:2px"></div>250–500 target window</div>
+      </div>
+      <div class="gdd-chart-wrap"><canvas id="pregddChart"></canvas></div>
+    </div>
+    <div class="sc-meta" id="pregddMeta" style="margin-top:8px;"></div>
+  </div>
+
+  <footer>
+    Weather &amp; soil data: <a href="https://open-meteo.com" target="_blank">Open-Meteo</a> ·
+    ZIP lookup: <a href="https://api.zippopotam.us" target="_blank">Zippopotam.us</a>
+  </footer>
+</div>
+
+<script>
+const WMO={0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',48:'Icy fog',51:'Light drizzle',53:'Moderate drizzle',55:'Dense drizzle',61:'Slight rain',63:'Moderate rain',65:'Heavy rain',71:'Slight snow',73:'Moderate snow',75:'Heavy snow',77:'Snow grains',80:'Slight showers',81:'Moderate showers',82:'Violent showers',85:'Slight snow showers',86:'Heavy snow showers',95:'Thunderstorm',96:'T-storm/hail',99:'T-storm/heavy hail'};
+const WICO={0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',71:'❄️',73:'❄️',75:'❄️',77:'🌨️',80:'🌦️',81:'🌦️',82:'⛈️',85:'🌨️',86:'🌨️',95:'⛈️',96:'⛈️',99:'⛈️'};
+
+let soilChartInst = null, gddChartInst = null;
+const $ = id => document.getElementById(id);
+function setErr(m) { const e = $('errMsg'); e.textContent = m; e.className = m ? 'err visible' : 'err'; }
+function setProgress(m) { $('progressStatus').textContent = m || ''; }
+function setLoading(on) { const b = $('loadBtn'); b.disabled = on; b.textContent = on ? 'Loading...' : 'Load'; }
+
+function dateStr(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function fmtDay(ds) {
+  const [y, m, d] = ds.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleString('en-US', {month:'short'}) + ' ' + dt.getDate();
+}
+function fmtHr(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', {month:'short'}) + ' ' + d.getDate() + ' ' + String(d.getHours()).padStart(2,'0') + ':00';
+}
+
+// Build daily {tmax, tmin} map from parallel hourly arrays. Safe against null/undefined inputs.
+function buildDailyMM(times, temps) {
+  const m = {};
+  if (!Array.isArray(times) || !Array.isArray(temps)) return m;
+  for (let i = 0; i < times.length; i++) {
+    if (!times[i]) continue;
+    const ds = times[i].slice(0, 10);
+    const v = temps[i];
+    if (v == null) continue;
+    if (!m[ds]) m[ds] = { tmax: -Infinity, tmin: Infinity };
+    if (v > m[ds].tmax) m[ds].tmax = v;
+    if (v < m[ds].tmin) m[ds].tmin = v;
+  }
+  for (const k in m) {
+    if (!isFinite(m[k].tmax)) m[k].tmax = null;
+    if (!isFinite(m[k].tmin)) m[k].tmin = null;
+  }
+  return m;
+}
+
+// GDD = max(0, mean(tmax, tmin) - base). Returns 0 if data missing.
+function calcGDD(tmax, tmin, base) {
+  if (tmax == null || tmin == null) return 0;
+  return Math.max(0, (tmax + tmin) / 2 - base);
+}
+
+async function resolveZip(zip) {
+  let r;
+  try { r = await fetch('https://api.zippopotam.us/us/' + zip); }
+  catch(e) { throw new Error('Network error looking up ZIP code.'); }
+  if (!r.ok) throw new Error('ZIP code "' + zip + '" not found. Please check and try again.');
+  const d = await r.json();
+  if (!d.places || d.places.length === 0) throw new Error('No location data found for ZIP "' + zip + '".');
+  const p = d.places[0];
+  if (!p) throw new Error('Invalid response from ZIP lookup service.');
+  return {
+    lat:   parseFloat(p['latitude'])        || 0,
+    lon:   parseFloat(p['longitude'])       || 0,
+    city:  p['place name']                  || 'Unknown',
+    state: p['state abbreviation']          || ''
+  };
+}
+
+async function loadData() {
+  const zip      = $('zipInput').value.trim();
+  const baseTemp = parseFloat($('baseTempInput').value);
+  if (!/^\d{5}$/.test(zip)) { setErr('Please enter a valid 5-digit US ZIP code.'); return; }
+  if (isNaN(baseTemp))       { setErr('Please enter a valid base temperature.'); return; }
+  setErr(''); setLoading(true);
+
+  try {
+    setProgress('Resolving ZIP code...');
+    const { lat, lon, city, state } = await resolveZip(zip);
+    $('locText').textContent = city + ', ' + state + '  ·  ' + lat.toFixed(4) + '°N, ' + Math.abs(lon).toFixed(4) + '°W';
+    $('locBadge').className = 'loc-badge visible';
+
+    const today    = new Date();
+    const todayStr = dateStr(today);
+    const year     = today.getFullYear();
+    const jan1Str  = year + '-01-01';
+
+    // === STEP 1: Forecast API (current + hourly past 5d / future 4d) ===
+    // IMPORTANT: temperature_2m is included in hourly so fcAirMM works correctly
+    setProgress('Fetching current conditions...');
+    const fcUrl = 'https://api.open-meteo.com/v1/forecast'
+      + '?latitude='  + lat + '&longitude=' + lon + '&timezone=auto'
+      + '&current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,wind_speed_10m,wind_gusts_10m,weather_code,soil_temperature_6cm'
+      + '&hourly=temperature_2m,precipitation_probability,et0_fao_evapotranspiration,soil_temperature_6cm,soil_moisture_0_to_1cm'
+      + '&daily=temperature_2m_max'
+      + '&temperature_unit=fahrenheit&wind_speed_unit=mph'
+      + '&past_days=5&forecast_days=4';
+
+    const fcRes  = await fetch(fcUrl);
+    const fcData = await fcRes.json();
+    if (fcData.error) throw new Error(fcData.reason || 'Forecast API error.');
+    if (!fcData.current) throw new Error('Forecast API did not return current conditions.');
+    if (!fcData.hourly || !Array.isArray(fcData.hourly.time)) throw new Error('Forecast API did not return hourly data.');
+
+    const cur = fcData.current;
+
+    // Populate current conditions card
+    $('cTemp').textContent      = (cur.temperature_2m     != null) ? parseFloat(cur.temperature_2m).toFixed(1)     : '--';
+    $('cApparent').textContent  = (cur.apparent_temperature != null) ? parseFloat(cur.apparent_temperature).toFixed(1) : '--';
+    $('cHumid').textContent    = (cur.relative_humidity_2m != null) ? cur.relative_humidity_2m                               : '--';
+    $('cDewpoint').textContent = (cur.dew_point_2m         != null) ? parseFloat(cur.dew_point_2m).toFixed(1) : '--';
+    $('cWind').textContent  = (cur.wind_speed_10m  != null) ? parseFloat(cur.wind_speed_10m).toFixed(1)  : '--';
+    $('cGust').textContent  = (cur.wind_gusts_10m != null) ? parseFloat(cur.wind_gusts_10m).toFixed(1) : '--';
+    const wc = cur.weather_code || 0;
+    $('cWeatherIcon').textContent = WICO[wc] || '';
+    $('cWeatherDesc').textContent = WMO[wc]  || ('Code ' + wc);
+    // Precipitation probability: match current hour in hourly array
+    (function() {
+      var pp = fcData.hourly.precipitation_probability || [];
+      var times = fcData.hourly.time || [];
+      var curHrStr = (cur.time || '').slice(0, 13);
+      var idx = times.findIndex(function(t) { return t.slice(0, 13) === curHrStr; });
+      var val = (idx >= 0 && pp[idx] != null) ? pp[idx] : null;
+      $('cPrecipProb').textContent = val != null ? val : '--';
+    })();
+    $('conditionsSection').style.display = 'block';
+    setTimeout(function() { $('condCard').classList.add('visible'); }, 20);
+
+    // Build soil/ET chart arrays (sample every 6 hours)
+    const ht  = fcData.hourly.time                        || [];
+    const het = fcData.hourly.et0_fao_evapotranspiration  || [];
+    const hst = fcData.hourly.soil_temperature_6cm         || [];
+    const hsm = fcData.hourly.soil_moisture_0_to_1cm       || [];
+    const nowHr = (cur.time || '').slice(0, 13);
+    const sLabels = [], sET = [], sST = [], sSM = [], sIsFc = [];
+    for (let i = 0; i < ht.length; i += 6) {
+      sLabels.push(fmtHr(ht[i]));
+      sET.push(het[i] != null ? +Number(het[i]).toFixed(3) : null);
+      sST.push(hst[i] != null ? +Number(hst[i]).toFixed(2) : null);
+      sSM.push(hsm[i] != null ? +Number(hsm[i]).toFixed(4) : null);
+      sIsFc.push(ht[i].slice(0, 13) >= nowHr);
+    }
+    buildSoilChart(sLabels, sET, sST, sSM, sIsFc);
+    $('chartMeta').textContent = city + ', ' + state + ' · every 6h · soil at 6 cm depth';
+
+    // Build 5-day soil history cards (past 5 complete days, not including today)
+    (function() {
+      var row = $('soilDayRow');
+      row.innerHTML = '';
+      // Get daily soil tmax/tmin from the forecast hourly data (past_days=5)
+      var soilByDay = buildDailyMM(ht, hst);
+      // Collect the 5 past days in order (yesterday back to 5 days ago), plus today
+      var days = [];
+      for (var i = 4; i >= 0; i--) {
+        var d = addDays(today, -i);
+        days.push(dateStr(d));
+      }
+      days.forEach(function(ds) {
+        var isToday = ds === todayStr;
+        var entry = soilByDay[ds];
+        var hi = (entry && entry.tmax != null) ? entry.tmax.toFixed(1) : '--';
+        var lo = (entry && entry.tmin != null) ? entry.tmin.toFixed(1) : '--';
+        var gdd = (entry && entry.tmax != null && entry.tmin != null)
+          ? Math.max(0, ((entry.tmax + entry.tmin) / 2) - baseTemp).toFixed(1)
+          : '--';
+        // Format day label
+        var parts = ds.split('-').map(Number);
+        var dt = new Date(parts[0], parts[1]-1, parts[2]);
+        var dayLabel = isToday ? 'Today' : dt.toLocaleString('en-US', {weekday:'short', month:'short', day:'numeric'});
+        var card = document.createElement('div');
+        card.className = 'soil-day-card' + (isToday ? ' is-today' : '');
+        card.innerHTML =
+          '<div class="soil-day-name' + (isToday ? ' is-today' : '') + '">' + dayLabel + '</div>' +
+          '<div class="soil-day-temps">' +
+            '<div class="soil-day-high">' + hi + '</div>' +
+            '<div class="soil-day-low"> / ' + lo + '</div>' +
+            '<div class="soil-day-unit">°F</div>' +
+          '</div>' +
+          '<div class="soil-day-gdd">GDD<span>' + gdd + '</span></div>';
+        row.appendChild(card);
+      });
+    })();
+
+    $('chartSection').style.display = 'block';
+    setTimeout(function() { $('chartPanel').classList.add('visible'); }, 40);
+
+    // Build daily maps from forecast hourly (used as fallback for recent archive gaps)
+    // temperature_2m IS in the hourly request so this will be populated correctly
+    const fcSoilMM = buildDailyMM(fcData.hourly.time, fcData.hourly.soil_temperature_6cm || []);
+    const fcAirMM  = buildDailyMM(fcData.hourly.time, fcData.hourly.temperature_2m       || []);
+
+    // === STEP 2: Fetch ALL soil temp data needed for GDD (Jan 1 → today) ===
+    //
+    // KEY INSIGHT: Open-Meteo forecast API supports past_days up to 92, with ZERO lag.
+    // Jan 1 → today is at most ~365 days. We use:
+    //   - forecast API with past_days=92  → covers today back 92 days, no lag
+    //   - archive API for Jan 1 → (today - 92 days) if needed (only after ~April 3)
+    //
+    // This is far simpler and more reliable than juggling archive lag windows.
+    // For most of the growing season the forecast API alone covers everything.
+
+    setProgress('Fetching YTD soil temperature data...');
+
+    // Days since Jan 1 (so we know if we need archive for early-year dates)
+    const dayOfYear = Math.floor((today - new Date(jan1Str + 'T00:00:00')) / 86400000) + 1;
+    const FC_MAX_PAST = 92; // Open-Meteo forecast past_days maximum
+
+    // Always fetch forecast with past_days=92 — this is the lag-free, authoritative source
+    const fcGDDUrl = 'https://api.open-meteo.com/v1/forecast'
+      + '?latitude=' + lat + '&longitude=' + lon + '&timezone=auto'
+      + '&hourly=soil_temperature_6cm,temperature_2m'
+      + '&temperature_unit=fahrenheit'
+      + '&past_days=' + FC_MAX_PAST + '&forecast_days=1';
+
+    const fcGDDRes  = await fetch(fcGDDUrl);
+    const fcGDDData = await fcGDDRes.json();
+    if (fcGDDData.error) throw new Error(fcGDDData.reason || 'GDD forecast API error.');
+    if (!fcGDDData.hourly || !Array.isArray(fcGDDData.hourly.time))
+      throw new Error('GDD forecast API returned no hourly data.');
+
+    const fcGDDSoilMM = buildDailyMM(fcGDDData.hourly.time, fcGDDData.hourly.soil_temperature_6cm || []);
+    const fcGDDAirMM  = buildDailyMM(fcGDDData.hourly.time, fcGDDData.hourly.temperature_2m       || []);
+
+    // If Jan 1 is more than 92 days ago, we also need archive for the early-year gap
+    let archSoilMM = {}, archAirMM = {};
+    if (dayOfYear > FC_MAX_PAST) {
+      setProgress('Fetching early-year archive data...');
+      // Archive covers Jan 1 → (today - FC_MAX_PAST days), non-overlapping with forecast window
+      const archEnd = dateStr(addDays(today, -(FC_MAX_PAST + 1)));
+      const archUrl = 'https://archive-api.open-meteo.com/v1/archive'
+        + '?latitude=' + lat + '&longitude=' + lon + '&timezone=auto'
+        + '&hourly=soil_temperature_6cm,temperature_2m'
+        + '&temperature_unit=fahrenheit'
+        + '&start_date=' + jan1Str + '&end_date=' + archEnd;
+      const archRes  = await fetch(archUrl);
+      const archData = await archRes.json();
+      if (!archData.error && archData.hourly && Array.isArray(archData.hourly.time)) {
+        archSoilMM = buildDailyMM(archData.hourly.time, archData.hourly.soil_temperature_6cm || []);
+        archAirMM  = buildDailyMM(archData.hourly.time, archData.hourly.temperature_2m       || []);
+      }
+    }
+
+    // === STEP 3: Accumulate GDD for every day Jan 1 → today ===
+    // Source priority: forecast (no lag) preferred; archive fills early-year gap if needed.
+    setProgress('Calculating GDD...');
+    const allDates = [], dailyGDDArr = [], tGDDArr = [], labelArr = [];
+    let cumulative = 0;
+
+    for (let dt = new Date(jan1Str + 'T12:00:00'); dateStr(dt) <= todayStr; dt = addDays(dt, 1)) {
+      const ds = dateStr(dt);
+      allDates.push(ds);
+
+      // Prefer forecast (lag-free); fall back to archive for early-year dates
+      let soilDay = null;
+      if (fcGDDSoilMM[ds] && fcGDDSoilMM[ds].tmax != null) {
+        soilDay = fcGDDSoilMM[ds];
+      } else if (archSoilMM[ds] && archSoilMM[ds].tmax != null) {
+        soilDay = archSoilMM[ds];
+      }
+
+      const dayGDD = soilDay ? calcGDD(soilDay.tmax, soilDay.tmin, baseTemp) : 0;
+      cumulative  += dayGDD;
+      dailyGDDArr.push(+dayGDD.toFixed(2));
+      tGDDArr.push(+cumulative.toFixed(2));
+      labelArr.push(fmtDay(ds));
+    }
+
+    // === Populate stat cards ===
+    const soilTempDisplay = (cur.soil_temperature_6cm != null)
+      ? parseFloat(cur.soil_temperature_6cm).toFixed(1) : '--';
+
+    // Today's air high: forecast window first (most current, no lag), then archive
+    let todayAirHigh = null;
+    if (fcGDDAirMM[todayStr] && fcGDDAirMM[todayStr].tmax != null) {
+      todayAirHigh = fcGDDAirMM[todayStr].tmax;
+    } else if (archAirMM[todayStr] && archAirMM[todayStr].tmax != null) {
+      todayAirHigh = archAirMM[todayStr].tmax;
+    } else if (fcAirMM[todayStr] && fcAirMM[todayStr].tmax != null) {
+      todayAirHigh = fcAirMM[todayStr].tmax;
+    } else if (fcData.daily && Array.isArray(fcData.daily.time)) {
+      const di = fcData.daily.time.indexOf(todayStr);
+      if (di >= 0 && fcData.daily.temperature_2m_max) {
+        todayAirHigh = fcData.daily.temperature_2m_max[di];
+      }
+    }
+
+    const todayIdx = allDates.indexOf(todayStr);
+    const todayGDD = (todayIdx >= 0) ? dailyGDDArr[todayIdx] : 0;
+    const totalGDD = tGDDArr.length ? tGDDArr[tGDDArr.length - 1] : 0;
+
+    $('gAirHigh').textContent  = (todayAirHigh != null) ? parseFloat(todayAirHigh).toFixed(1) : '--';
+    $('gSoilTemp').textContent = soilTempDisplay;
+    $('gTodayGDD').textContent = Number(todayGDD).toFixed(1);
+    $('gTotalGDD').textContent = Math.round(totalGDD);
+    $('gBaseLbl').textContent  = baseTemp;
+    $('gddYear').textContent   = year;
+    $('gddChartMeta').textContent = city + ', ' + state + ' · base ' + baseTemp + '°F · soil 6 cm depth';
+
+
+    // === STEP 4: 30-day tGDD forecast ===
+    // Ported from reference implementation (soil-temp-GDD.html).
+    // Strategy:
+    //   1. Fetch 3 prior years of DAILY soil_temperature_0_to_7cm_mean for the
+    //      same 30-day calendar window (using Date.setFullYear — handles leap years).
+    //      All 3 fetches run in parallel via Promise.all.
+    //   2. Average by day-offset (0=tomorrow, 1=day after…) to get climMeans[].
+    //   3. Compute a bias: (mean of recent 14-day observed F) − (clim mean F for offset 0).
+    //      Cap bias at ±8°F and decay it linearly to 0 by day 30.
+    //   4. predMeanF = climF + decayedBias → GDD = max(0, predMeanF − base)
+    //   5. Accumulate from last observed tGDD.
+    setProgress('Fetching 3-year climatological forecast data...');
+    const FORECAST_DAYS = 30;
+    const todayLocalStr = todayStr; // already set above as YYYY-MM-DD local date
+
+    // --- Fetch climatology: 3 prior years, same 30-day window, in parallel ---
+    const climFetches = [year - 1, year - 2, year - 3].map(function(py) {
+      // Use the same technique as reference: setFullYear on today's date object
+      const s = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      s.setFullYear(py);
+      const e = new Date(s); e.setDate(e.getDate() + FORECAST_DAYS - 1);
+      const sStr = dateStr(s); // local date string YYYY-MM-DD
+      const eStr = dateStr(e);
+      const url = 'https://archive-api.open-meteo.com/v1/archive'
+        + '?latitude=' + lat + '&longitude=' + lon + '&timezone=auto'
+        + '&daily=soil_temperature_0_to_7cm_mean'
+        + '&temperature_unit=fahrenheit'
+        + '&start_date=' + sStr + '&end_date=' + eStr;
+      return fetch(url).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+    });
+
+    // --- Fetch recent 14-day archive for bias correction (also in parallel) ---
+    const biasEnd   = addDays(today, -1);
+    const biasStart = addDays(today, -14);
+    const biasFetch = fetch(
+      'https://archive-api.open-meteo.com/v1/archive'
+      + '?latitude=' + lat + '&longitude=' + lon + '&timezone=auto'
+      + '&daily=soil_temperature_0_to_7cm_mean'
+      + '&temperature_unit=fahrenheit'
+      + '&start_date=' + dateStr(biasStart) + '&end_date=' + dateStr(biasEnd)
+    ).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+
+    const [climResults, biasJson] = await Promise.all([Promise.all(climFetches), biasFetch]);
+
+    // --- Average climatology by day-offset ---
+    // byOffset[0] = today's clim, byOffset[1] = tomorrow, etc.
+    const byOffset = {};
+    climResults.forEach(function(res) {
+      if (!res || !res.daily || !res.daily.time) return;
+      res.daily.time.forEach(function(_, i) {
+        const v = (res.daily.soil_temperature_0_to_7cm_mean || [])[i];
+        if (v == null) return;
+        if (!byOffset[i]) byOffset[i] = [];
+        byOffset[i].push(v);
+      });
+    });
+    // climMeans[0] = today's expected mean F, [1] = tomorrow, …, [29] = day+30
+    const climMeans = Array.from({ length: FORECAST_DAYS + 1 }, function(_, i) {
+      const vals = byOffset[i] || [];
+      if (!vals.length) return null;
+      return vals.reduce(function(a, b) { return a + b; }, 0) / vals.length;
+    });
+
+    // --- Bias correction: recent observed mean vs clim[0] ---
+    let biasF = 0;
+    if (biasJson && biasJson.daily && biasJson.daily.time) {
+      const obsMeans = biasJson.daily.soil_temperature_0_to_7cm_mean || [];
+      const validObs = obsMeans.filter(function(v) { return v != null; });
+      if (validObs.length > 0 && climMeans[0] != null) {
+        const recentObsMeanF = validObs.reduce(function(a, b) { return a + b; }, 0) / validObs.length;
+        biasF = recentObsMeanF - climMeans[0];
+        biasF = Math.max(-8, Math.min(8, biasF)); // cap at ±8°F
+      }
+    }
+
+    // --- Build 30-day forecast arrays ---
+    // offset i=0 → tomorrow (fcDates[0]), decayed bias = biasF*(1-i/30)
+    const fcLabelArr = [], fcDailyGDDArr = [], fcTGDDArr = [];
+    let fcCumulative = totalGDD;
+
+    for (let fi = 0; fi < FORECAST_DAYS; fi++) {
+      const ds      = dateStr(addDays(today, fi + 1));
+      const clim    = climMeans[fi + 1]; // offset fi+1: tomorrow=1, day after=2, …
+      let dayGDD = 0;
+      if (clim != null) {
+        const decayedBias = biasF * Math.max(0, 1 - fi / 30);
+        const predMeanF   = clim + decayedBias;
+        dayGDD = Math.max(0, predMeanF - baseTemp);
+      }
+      fcCumulative += dayGDD;
+      fcLabelArr.push(fmtDay(ds));
+      fcDailyGDDArr.push(+dayGDD.toFixed(2));
+      fcTGDDArr.push(+fcCumulative.toFixed(2));
+    }
+
+    buildGDDChart(labelArr, dailyGDDArr, tGDDArr, fcLabelArr, fcDailyGDDArr, fcTGDDArr);
+
+    $('gddSection').style.display = 'block';
+    $('gddStatRow').classList.add('visible');
+    setTimeout(function() { $('gddChartPanel').classList.add('visible'); }, 60);
+
+    // === STEP 5: Freeze date climatology (10 years of daily tmin) ===
+    setProgress('Calculating frost & freeze dates...');
+    try {
+      // Fetch 10 years of daily temperature_2m_min from archive
+      // Split into two 5-year fetches to avoid overly large requests
+      const FREEZE_YEARS = 10;
+      const freezeEnd   = (year - 1) + '-12-31';
+      const freezeStart = (year - FREEZE_YEARS) + '-01-01';
+
+      const freezeUrl = 'https://archive-api.open-meteo.com/v1/archive'
+        + '?latitude=' + lat + '&longitude=' + lon + '&timezone=auto'
+        + '&daily=temperature_2m_min'
+        + '&temperature_unit=fahrenheit'
+        + '&start_date=' + freezeStart + '&end_date=' + freezeEnd;
+
+      const freezeRes  = await fetch(freezeUrl);
+      const freezeData = await freezeRes.json();
+
+      if (!freezeData.error && freezeData.daily && freezeData.daily.time) {
+        const ftimes = freezeData.daily.time;
+        const ftemps = freezeData.daily.temperature_2m_min;
+
+        // Build a map: "MM-DD" → array of min temps across all years
+        const byMMDD = {};
+        for (let i = 0; i < ftimes.length; i++) {
+          const t = ftemps[i];
+          if (t == null) continue;
+          const mmdd = ftimes[i].slice(5); // "MM-DD"
+          if (!byMMDD[mmdd]) byMMDD[mmdd] = [];
+          byMMDD[mmdd].push(t);
+        }
+
+        // For each MM-DD, compute freeze probability (% of years with min ≤ 32°F)
+        // Build ordered list of all MM-DD values for the full year
+        const allMMDD = [];
+        for (let mo = 1; mo <= 12; mo++) {
+          const days = [31,28,31,30,31,30,31,31,30,31,30,31][mo-1];
+          for (let d = 1; d <= days; d++) {
+            allMMDD.push(String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0'));
+          }
+        }
+
+        // Compute freeze probability per MM-DD
+        const freezeProb = {}; // "MM-DD" → 0..1
+        for (const mmdd of allMMDD) {
+          const vals = byMMDD[mmdd] || [];
+          if (!vals.length) { freezeProb[mmdd] = null; continue; }
+          const freezeCount = vals.filter(function(v) { return v <= 32; }).length;
+          freezeProb[mmdd] = freezeCount / vals.length;
+        }
+
+        // Last spring freeze: scan Jan→Jul, find latest date with prob ≥ 0.10
+        // (i.e. froze in at least 10% of years = "still possible")
+        const springMMDDs = allMMDD.slice(0, 212); // Jan 1 through Jul 31
+        let lastSpringMMDD = null;
+        for (let i = springMMDDs.length - 1; i >= 0; i--) {
+          if (freezeProb[springMMDDs[i]] >= 0.10) { lastSpringMMDD = springMMDDs[i]; break; }
+        }
+
+        // First fall freeze: scan Aug→Dec, find earliest date with prob ≥ 0.10
+        const fallMMDDs = allMMDD.slice(212); // Aug 1 through Dec 31
+        let firstFallMMDD = null;
+        for (let i = 0; i < fallMMDDs.length; i++) {
+          if (freezeProb[fallMMDDs[i]] >= 0.10) { firstFallMMDD = fallMMDDs[i]; break; }
+        }
+
+        // Format MM-DD as "Month D" for display
+        function mmddToLabel(mmdd) {
+          if (!mmdd) return '—';
+          const parts = mmdd.split('-');
+          const d = new Date(2001, parseInt(parts[0]) - 1, parseInt(parts[1]));
+          return d.toLocaleString('en-US', { month: 'long', day: 'numeric' });
+        }
+
+        // Get the median last spring / first fall (50% probability threshold)
+        let lastSpring50 = null, firstFall50 = null;
+        for (let i = springMMDDs.length - 1; i >= 0; i--) {
+          if (freezeProb[springMMDDs[i]] >= 0.50) { lastSpring50 = springMMDDs[i]; break; }
+        }
+        for (let i = 0; i < fallMMDDs.length; i++) {
+          if (freezeProb[fallMMDDs[i]] >= 0.50) { firstFall50 = fallMMDDs[i]; break; }
+        }
+
+        // Frost-free days between last spring 10% and first fall 10%
+        function daysBetweenMMDD(a, b) {
+          if (!a || !b) return null;
+          const da = new Date(2001, parseInt(a.slice(0,2))-1, parseInt(a.slice(3)));
+          const db = new Date(2001, parseInt(b.slice(0,2))-1, parseInt(b.slice(3)));
+          return Math.round((db - da) / 86400000);
+        }
+        const frostFreeDays = daysBetweenMMDD(lastSpringMMDD, firstFallMMDD);
+
+        // Display
+        $('fLastSpring').textContent    = mmddToLabel(lastSpringMMDD);
+        $('fLastSpring50').textContent  = mmddToLabel(lastSpring50) || '—';
+        $('fLastSpringSub').textContent = mmddToLabel(lastSpringMMDD) || '—';
+
+        $('fFirstFall').textContent     = mmddToLabel(firstFallMMDD);
+        $('fFirstFall50').textContent   = mmddToLabel(firstFall50) || '—';
+        $('fFirstFallSub').textContent  = mmddToLabel(firstFallMMDD) || '—';
+
+        $('fFrostFree').textContent     = frostFreeDays ? frostFreeDays + ' days' : '—';
+        $('fFrostFreeSub').textContent  = lastSpringMMDD && firstFallMMDD
+          ? mmddToLabel(lastSpring50 || lastSpringMMDD) + ' → ' + mmddToLabel(firstFall50 || firstFallMMDD)
+          : '';
+
+        // Narrative
+        const narrative = [];
+        if (lastSpringMMDD) {
+          narrative.push(
+            'In <strong>' + city + ', ' + state + '</strong>, the last spring freeze '
+            + '(air temperature at or below 32°F) typically occurs around '
+            + '<strong>' + mmddToLabel(lastSpring50 || lastSpringMMDD) + '</strong>. '
+            + 'There is still a 10% chance of a freeze as late as <strong>'
+            + mmddToLabel(lastSpringMMDD) + '</strong>.'
+          );
+        }
+        if (firstFallMMDD) {
+          narrative.push(
+            'The first fall freeze typically arrives around '
+            + '<strong>' + mmddToLabel(firstFall50 || firstFallMMDD) + '</strong>, '
+            + 'with a 10% chance of an early freeze as soon as '
+            + '<strong>' + mmddToLabel(firstFallMMDD) + '</strong>.'
+          );
+        }
+        if (frostFreeDays) {
+          narrative.push(
+            'This gives ' + city + ' an expected frost-free growing window of approximately '
+            + '<strong>' + frostFreeDays + ' days</strong>.'
+          );
+        }
+        $('freezeNarrative').innerHTML = narrative.join(' ');
+        $('freezeMeta').textContent    = 'Based on ' + FREEZE_YEARS + ' years of observed daily minimum air temperature (2m) · 10% threshold = "possible", 50% threshold = "typical"';
+
+        // --- Fall Overseed Window: 6 weeks before → 6 weeks+10 days before first fall freeze (50%) ---
+        (function() {
+          const refMMDD = firstFall50 || firstFallMMDD;
+          if (!refMMDD) return;
+          const p = refMMDD.split('-');
+          const refDate = new Date(2001, parseInt(p[0]) - 1, parseInt(p[1]));
+
+          const openDate  = new Date(refDate); openDate.setDate(openDate.getDate() - 42);  // -6 weeks
+          const closeDate = new Date(refDate); closeDate.setDate(closeDate.getDate() - 32); // -6 weeks + 10 days
+
+          function fmtDate(d) {
+            return d.toLocaleString('en-US', { month: 'long', day: 'numeric' });
+          }
+          $('seedFallOpen').textContent  = fmtDate(openDate);
+          $('seedFallClose').textContent = fmtDate(closeDate);
+          $('seedFallRange').textContent = fmtDate(openDate) + ' → ' + fmtDate(closeDate);
+          $('seedFallNarrative').innerHTML =
+            'The optimal fall overseed window for <strong>' + city + ', ' + state + '</strong> '
+            + 'runs from <strong>' + fmtDate(openDate) + '</strong> to <strong>' + fmtDate(closeDate) + '</strong> — '
+            + 'a 10-day window beginning 6 weeks before the first expected fall freeze (<strong>'
+            + mmddToLabel(refMMDD) + '</strong>). '
+            + 'This timing allows adequate soil warmth for germination while providing enough growing days '
+            + 'for new turf to establish before cold temperatures arrive.';
+        })();
+
+        $('freezeSection').style.display = 'block';
+        setTimeout(function() { $('freezeCard').style.opacity = '1'; }, 40);
+      }
+    } catch(ef) { /* freeze section is bonus — don't block on failure */ }
+
+    // === STEP 6: preGDD — cumulative base-32 soil GDD, Jan 1 → Jun 30, 10-yr avg ===
+    setProgress('Calculating pre-season GDD...');
+    try {
+      const PREGDD_BASE  = 32;
+      const PREGDD_YEARS = 10;
+      const PREGDD_LOW   = 250;
+      const PREGDD_HIGH  = 500;
+
+      // Fetch 10 years of daily soil_temperature_0_to_7cm_mean, Jan 1 – Jun 30
+      // Run all 10 fetches in parallel
+      const pregddFetches = [];
+      for (let py = year - 1; py >= year - PREGDD_YEARS; py--) {
+        const url = 'https://archive-api.open-meteo.com/v1/archive'
+          + '?latitude=' + lat + '&longitude=' + lon + '&timezone=auto'
+          + '&daily=soil_temperature_0_to_7cm_mean'
+          + '&temperature_unit=fahrenheit'
+          + '&start_date=' + py + '-01-01'
+          + '&end_date='   + py + '-06-30';
+        pregddFetches.push(
+          fetch(url).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+        );
+      }
+      const pregddResults = await Promise.all(pregddFetches);
+
+      // Average daily soil mean by MM-DD across all available years
+      const pgByMMDD = {};  // "MM-DD" -> { sum, count }
+      pregddResults.forEach(function(res) {
+        if (!res || !res.daily || !res.daily.time) return;
+        res.daily.time.forEach(function(ds, i) {
+          const v = (res.daily.soil_temperature_0_to_7cm_mean || [])[i];
+          if (v == null) return;
+          const mmdd = ds.slice(5);
+          if (!pgByMMDD[mmdd]) pgByMMDD[mmdd] = { sum: 0, count: 0 };
+          pgByMMDD[mmdd].sum   += v;
+          pgByMMDD[mmdd].count += 1;
+        });
+      });
+
+      // Build ordered Jan 1 – Jun 30 MM-DD sequence (non-leap)
+      const pgMMDDs = [];
+      const pgMonthDays = [31, 28, 31, 30, 31, 30]; // Jan–Jun
+      for (let mo = 1; mo <= 6; mo++) {
+        for (let d = 1; d <= pgMonthDays[mo - 1]; d++) {
+          pgMMDDs.push(String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0'));
+        }
+      }
+
+      // Accumulate preGDD from Jan 1 forward
+      const pgLabels = [], pgDailyArr = [], pgCumArr = [];
+      let pgCum = 0;
+      let pg250mmdd = null, pg500mmdd = null;
+
+      pgMMDDs.forEach(function(mmdd) {
+        const entry  = pgByMMDD[mmdd];
+        const meanF  = entry ? entry.sum / entry.count : null;
+        const daily  = (meanF != null) ? Math.max(0, meanF - PREGDD_BASE) : 0;
+        pgCum += daily;
+
+        pgLabels.push(mmdd);
+        pgDailyArr.push(+daily.toFixed(2));
+        pgCumArr.push(+pgCum.toFixed(1));
+
+        if (pg250mmdd === null && pgCum >= PREGDD_LOW)  pg250mmdd = mmdd;
+        if (pg500mmdd === null && pgCum >= PREGDD_HIGH) pg500mmdd = mmdd;
+      });
+
+      // Format MM-DD → "Month D, YYYY" using current year for display
+      function pgLabel(mmdd) {
+        if (!mmdd) return '—';
+        const p = mmdd.split('-');
+        const d = new Date(year, parseInt(p[0]) - 1, parseInt(p[1]));
+        return d.toLocaleString('en-US', { month: 'long', day: 'numeric' });
+      }
+
+      // Days between two MM-DD values (Jan-Jun only, same year)
+      function pgDaysBetween(a, b) {
+        if (!a || !b) return null;
+        const pa = a.split('-'), pb = b.split('-');
+        const da = new Date(2001, parseInt(pa[0])-1, parseInt(pa[1]));
+        const db = new Date(2001, parseInt(pb[0])-1, parseInt(pb[1]));
+        return Math.round((db - da) / 86400000);
+      }
+      const windowDays = pgDaysBetween(pg250mmdd, pg500mmdd);
+
+      // Populate stat cards
+      $('pg250date').textContent    = pgLabel(pg250mmdd);
+      $('pg500date').textContent    = pgLabel(pg500mmdd);
+      $('pgWindowDays').textContent = windowDays != null ? windowDays + ' days' : '—';
+      $('pgWindowRange').textContent = (pg250mmdd && pg500mmdd)
+        ? pgLabel(pg250mmdd) + ' → ' + pgLabel(pg500mmdd) : '';
+
+      // Narrative
+      let pgNarr = '';
+      if (pg250mmdd && pg500mmdd) {
+        pgNarr = 'Based on ' + PREGDD_YEARS + '-year average soil temperatures (0–7 cm depth), '
+          + '<strong>' + city + ', ' + state + '</strong> historically accumulates '
+          + '<strong>' + PREGDD_LOW + ' preGDD</strong> (base 32°F) around <strong>'
+          + pgLabel(pg250mmdd) + '</strong>. '
+          + 'The <strong>' + PREGDD_LOW + '–' + PREGDD_HIGH + ' preGDD window</strong> — '
+          + 'often used as a soil-warming indicator for early-season field activities — '
+          + 'typically spans from <strong>' + pgLabel(pg250mmdd) + '</strong> to <strong>'
+          + pgLabel(pg500mmdd) + '</strong>, a window of approximately <strong>'
+          + windowDays + ' days</strong>.';
+      }
+      $('pregddNarrative').innerHTML = pgNarr;
+      $('pregddMeta').textContent = 'Based on ' + PREGDD_YEARS + ' years of daily mean soil temperature (0–7 cm) from the Open-Meteo archive · base 32°F';
+
+      // Build the chart
+      buildPreGDDChart(pgLabels, pgCumArr, pg250mmdd, pg500mmdd);
+
+      // --- dmiGDD: same data, base 50, window 140–175 ---
+      const DMI_BASE = 50, DMI_LOW = 140, DMI_HIGH = 175;
+      let dmiCum = 0, dmi140mmdd = null, dmi175mmdd = null;
+      pgMMDDs.forEach(function(mmdd) {
+        const entry = pgByMMDD[mmdd];
+        const meanF = entry ? entry.sum / entry.count : null;
+        const daily = (meanF != null) ? Math.max(0, meanF - DMI_BASE) : 0;
+        dmiCum += daily;
+        if (dmi140mmdd === null && dmiCum >= DMI_LOW)  dmi140mmdd = mmdd;
+        if (dmi175mmdd === null && dmiCum >= DMI_HIGH) dmi175mmdd = mmdd;
+      });
+
+      const dmiWindowDays = pgDaysBetween(dmi140mmdd, dmi175mmdd);
+      $('dmi140date').textContent    = pgLabel(dmi140mmdd);
+      $('dmi175date').textContent    = pgLabel(dmi175mmdd);
+      $('dmiWindowDays').textContent = dmiWindowDays != null ? dmiWindowDays + ' days' : '—';
+      $('dmiWindowRange').textContent = (dmi140mmdd && dmi175mmdd)
+        ? pgLabel(dmi140mmdd) + ' → ' + pgLabel(dmi175mmdd) : '';
+
+      if (dmi140mmdd && dmi175mmdd) {
+        $('dmiNarrative').innerHTML =
+          'The pre-season DMI fungicide application window for <strong>' + city + ', ' + state + '</strong> '
+          + 'typically opens around <strong>' + pgLabel(dmi140mmdd) + '</strong> '
+          + '(140 dmiGDD, base 50°F) and closes around <strong>' + pgLabel(dmi175mmdd) + '</strong> '
+          + '(175 dmiGDD), a window of approximately <strong>' + dmiWindowDays + ' days</strong>. '
+          + 'DMI applications during this period target early-season fungal pressure before canopy closure.';
+      }
+
+      $('pregddSection').style.display = 'block';
+    } catch(epg) { /* non-blocking */ }
+
+    setProgress('');
+
+  } catch(e) {
+    setErr(e.message || 'An unexpected error occurred.');
+    setProgress('');
+  } finally {
+    setLoading(false);
+  }
+}
+
+// === Soil/ET chart (5-day hourly) ===
+function buildSoilChart(labels, et0, soilT, soilM, isFc) {
+  if (soilChartInst) soilChartInst.destroy();
+  const firstFc = isFc.findIndex(Boolean);
+  const ctx = $('soilChart').getContext('2d');
+
+  function mkGrad(r, g, b) {
+    const gr = ctx.createLinearGradient(0, 0, 0, 300);
+    gr.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.22)');
+    gr.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0.02)');
+    return gr;
+  }
+
+  const shadePlugin = {
+    id: 'shade',
+    beforeDraw: function(chart) {
+      if (firstFc < 0) return;
+      const cx = chart.ctx, a = chart.chartArea, s = chart.scales;
+      const x = s.x.getPixelForValue(firstFc);
+      cx.save();
+      cx.fillStyle = 'rgba(212,168,90,0.07)';
+      cx.fillRect(x, a.top, a.right - x, a.bottom - a.top);
+      cx.setLineDash([4, 4]);
+      cx.strokeStyle = 'rgba(212,168,90,0.5)'; cx.lineWidth = 1.2;
+      cx.beginPath(); cx.moveTo(x, a.top); cx.lineTo(x, a.bottom); cx.stroke();
+      cx.restore();
+    }
+  };
+
+  soilChartInst = new Chart(ctx, {
+    type: 'line',
+    plugins: [shadePlugin],
+    data: {
+      labels: labels,
+      datasets: [
+        { label:'ET0', data:et0, borderColor:'#5c7a3c', backgroundColor:mkGrad(92,122,60), borderWidth:2, pointRadius:2, pointHoverRadius:5, fill:true, tension:0.4, yAxisID:'yET', spanGaps:true },
+        { label:'Soil Temp', data:soilT, borderColor:'#b8864e', backgroundColor:mkGrad(184,134,78), borderWidth:2, pointRadius:2, pointHoverRadius:5, fill:true, tension:0.4, yAxisID:'yST', spanGaps:true },
+        { label:'Soil Moisture', data:soilM, borderColor:'#6ab5a0', backgroundColor:mkGrad(106,181,160), borderWidth:2, pointRadius:2, pointHoverRadius:5, fill:true, tension:0.4, yAxisID:'ySM', spanGaps:true },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor:'#2c1a0e', titleColor:'#f0c97a', bodyColor:'#faf5eb',
+          borderColor:'rgba(212,168,90,0.25)', borderWidth:1, padding:12,
+          titleFont:{family:'DM Mono',size:10}, bodyFont:{family:'DM Sans',size:12},
+          filter: function(i) { return i.raw != null; },
+          callbacks: {
+            title: function(c) { return c[0].label; },
+            label: function(c) {
+              if (c.raw == null) return null;
+              var u = [' ET0: '+c.raw+' mm/hr', ' Soil Temp: '+c.raw+' F', ' Soil Moisture: '+c.raw+' m3/m3'];
+              return u[c.datasetIndex] || (' '+c.raw);
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid:{color:'rgba(74,46,26,0.05)'}, ticks:{font:{family:'DM Mono',size:9},color:'#7a6248',maxRotation:45,minRotation:30,maxTicksLimit:16} },
+        yET: { type:'linear', position:'left',  grid:{color:'rgba(92,122,60,0.08)'}, ticks:{font:{family:'DM Mono',size:9},color:'#5c7a3c'}, title:{display:true,text:'ET0 mm/hr',color:'#5c7a3c',font:{family:'DM Mono',size:9}} },
+        yST: { type:'linear', position:'right', grid:{drawOnChartArea:false}, ticks:{font:{family:'DM Mono',size:9},color:'#b8864e'}, title:{display:true,text:'Soil F',color:'#b8864e',font:{family:'DM Mono',size:9}} },
+        ySM: { type:'linear', position:'right', grid:{drawOnChartArea:false}, ticks:{font:{family:'DM Mono',size:9},color:'#6ab5a0'}, title:{display:true,text:'m3/m3',color:'#6ab5a0',font:{family:'DM Mono',size:9}}, offset:true },
+      }
+    }
+  });
+}
+
+// === GDD chart: daily GDD bars (left axis) + cumulative tGDD line (right axis) ===
+// X-axis = each calendar day Jan 1 → today
+function buildGDDChart(labels, dailyGDD, tGDD, fcLabels, fcDailyGDD, fcTGDD) {
+  if (gddChartInst) gddChartInst.destroy();
+  const ctx = $('gddChart').getContext('2d');
+
+  // Merge all labels: historical then forecast
+  const allLabels = labels.concat(fcLabels || []);
+  const histLen   = labels.length;
+  const totalLen  = allLabels.length;
+
+  // Historical arrays: real values for indices 0..histLen-1, null after
+  const histDailyPad = dailyGDD.concat(new Array(totalLen - histLen).fill(null));
+  const histTGDDPad  = tGDD.concat(new Array(totalLen - histLen).fill(null));
+
+  // Forecast daily bars: null for historical zone, real values starting at histLen
+  const fcDailyPad = new Array(histLen).fill(null).concat(fcDailyGDD || []);
+
+  // Forecast cumulative line: bridge ONE point at histLen-1 so the line joins
+  // seamlessly to the historical line, then forecast values from histLen onward.
+  // Total length = (histLen-1 nulls) + 1 bridge + fcTGDD.length = histLen + fcTGDD.length = totalLen ✓
+  const lastActual = tGDD.length ? tGDD[tGDD.length - 1] : 0;
+  const fcTGDDPad  = new Array(histLen - 1).fill(null)
+    .concat([lastActual])
+    .concat(fcTGDD || []);
+
+  // 100-GDD milestone markers: find indices where cumulative tGDD crosses each 100
+  // Check both historical and forecast series
+  const combinedTGDD = histTGDDPad.map((v, i) => v != null ? v : fcTGDDPad[i]);
+  const milestoneData = new Array(totalLen).fill(null);
+  let nextMilestone = 100;
+  for (let i = 0; i < combinedTGDD.length; i++) {
+    const v = combinedTGDD[i];
+    if (v == null) continue;
+    while (nextMilestone <= v) {
+      // Interpolate exact crossing index between i-1 and i
+      const prev = combinedTGDD[i - 1] || 0;
+      const frac = (nextMilestone - prev) / (v - prev);
+      const crossIdx = Math.round((i - 1) + frac);
+      const clampedIdx = Math.min(Math.max(crossIdx, 0), totalLen - 1);
+      milestoneData[clampedIdx] = combinedTGDD[clampedIdx] || nextMilestone;
+      nextMilestone += 100;
+    }
+  }
+
+  // Forecast zone background + divider line plugin
+  const fcZonePlugin = {
+    id: 'fcZone',
+    beforeDraw: function(chart) {
+      const cx = chart.ctx, a = chart.chartArea, s = chart.scales;
+      if (!s.x || !a) return;
+      const xStart = s.x.getPixelForValue(histLen - 1);
+      cx.save();
+      cx.fillStyle = 'rgba(106,181,160,0.07)';
+      cx.fillRect(xStart, a.top, a.right - xStart, a.bottom - a.top);
+      cx.setLineDash([5, 4]);
+      cx.strokeStyle = 'rgba(106,181,160,0.5)';
+      cx.lineWidth = 1.5;
+      cx.beginPath(); cx.moveTo(xStart, a.top); cx.lineTo(xStart, a.bottom); cx.stroke();
+      cx.restore();
+    }
+  };
+
+  gddChartInst = new Chart(ctx, {
+    plugins: [fcZonePlugin],
+    data: {
+      labels: allLabels,
+      datasets: [
+        {
+          type: 'bar', label: 'Daily GDD',
+          data: histDailyPad,
+          backgroundColor: 'rgba(212,168,90,0.6)',
+          borderColor: 'rgba(184,134,78,0.85)',
+          borderWidth: 1, borderRadius: 2,
+          yAxisID: 'yDaily', order: 3,
+        },
+        {
+          type: 'bar', label: 'Projected Daily GDD',
+          data: fcDailyPad,
+          backgroundColor: 'rgba(106,181,160,0.45)',
+          borderColor: 'rgba(106,181,160,0.75)',
+          borderWidth: 1, borderRadius: 2,
+          yAxisID: 'yDaily', order: 4,
+        },
+        {
+          type: 'line', label: 'Cumulative tGDD',
+          data: histTGDDPad,
+          borderColor: '#5c7a3c', backgroundColor: 'transparent',
+          borderWidth: 2.5, pointRadius: 0,
+          pointHoverRadius: 6, pointHoverBackgroundColor: '#5c7a3c',
+          pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2,
+          fill: false, tension: 0.3,
+          yAxisID: 'yTotal', order: 1, spanGaps: false,
+        },
+        {
+          type: 'line', label: 'Projected tGDD',
+          data: fcTGDDPad,
+          borderColor: '#6ab5a0', backgroundColor: 'transparent',
+          borderWidth: 2.5, pointRadius: 0,
+          pointHoverRadius: 6, pointHoverBackgroundColor: '#6ab5a0',
+          pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2,
+          fill: false, tension: 0.3,
+          yAxisID: 'yTotal', order: 2, spanGaps: true,
+          segment: { borderDash: function() { return [6, 4]; } }
+        },
+        {
+          // 100-GDD milestone dots — plain array aligned to allLabels x-axis
+          type: 'line',
+          label: '100-GDD Milestone',
+          data: milestoneData,
+          backgroundColor: '#f0c97a',
+          borderColor: '#2c1a0e',
+          borderWidth: 1.5,
+          pointRadius: function(ctx) { return ctx.raw != null ? 6 : 0; },
+          pointHoverRadius: 8,
+          pointStyle: 'circle',
+          showLine: false,
+          spanGaps: false,
+          yAxisID: 'yTotal', order: 0,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor:'#2c1a0e', titleColor:'#f0c97a', bodyColor:'#faf5eb',
+          borderColor:'rgba(212,168,90,0.25)', borderWidth:1, padding:12,
+          titleFont:{family:'DM Mono',size:10}, bodyFont:{family:'DM Sans',size:12},
+          filter: function(i) { return i.raw != null; },
+          callbacks: {
+            title: function(c) { return c[0].label; },
+            label: function(c) {
+              if (c.dataset.label === '100-GDD Milestone') return ' ★ ' + Math.round(c.parsed.y) + ' tGDD milestone';
+              var names = [' Daily GDD: ',' Proj. Daily GDD: ',' tGDD: ',' Proj. tGDD: '];
+              return (names[c.datasetIndex] || ' ') + c.raw;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color:'rgba(74,46,26,0.04)' },
+          ticks: {
+            font:{family:'DM Mono',size:9}, color:'#7a6248',
+            maxRotation:50, minRotation:35, maxTicksLimit:28,
+            callback: function(v, i) { return i % 7 === 0 ? this.getLabelForValue(v) : ''; }
+          }
+        },
+        yDaily: {
+          type:'linear', position:'left',
+          grid: { color:'rgba(212,168,90,0.1)' },
+          ticks: { font:{family:'DM Mono',size:9}, color:'#b8864e' },
+          title: { display:true, text:'Daily GDD', color:'#b8864e', font:{family:'DM Mono',size:9} },
+          min: 0,
+        },
+        yTotal: {
+          type:'linear', position:'right',
+          grid: { drawOnChartArea:false },
+          ticks: { font:{family:'DM Mono',size:9}, color:'#5c7a3c' },
+          title: { display:true, text:'Cumulative tGDD', color:'#5c7a3c', font:{family:'DM Mono',size:9} },
+          min: 0,
+        }
+      }
+    }
+  });
+}
+
+
+// === preGDD chart: cumulative base-32 soil GDD Jan 1 → Jun 30 ===
+let pregddChartInst = null;
+function buildPreGDDChart(labels, cumArr, mmdd250, mmdd500) {
+  if (pregddChartInst) pregddChartInst.destroy();
+  const ctx = $('pregddChart').getContext('2d');
+
+  // Find indices of 250 and 500 crossing for the shaded window
+  const idx250 = mmdd250 ? labels.indexOf(mmdd250) : -1;
+  const idx500 = mmdd500 ? labels.indexOf(mmdd500) : -1;
+
+  // Window highlight plugin
+  const windowPlugin = {
+    id: 'pgWindow',
+    beforeDraw: function(chart) {
+      if (idx250 < 0 || idx500 < 0) return;
+      const cx = chart.ctx, a = chart.chartArea, s = chart.scales;
+      const x1 = s.x.getPixelForValue(idx250);
+      const x2 = s.x.getPixelForValue(idx500);
+      cx.save();
+      cx.fillStyle = 'rgba(106,181,160,0.13)';
+      cx.fillRect(x1, a.top, x2 - x1, a.bottom - a.top);
+      // 250 line
+      cx.setLineDash([5, 4]); cx.strokeStyle = 'rgba(106,181,160,0.7)'; cx.lineWidth = 1.5;
+      cx.beginPath(); cx.moveTo(x1, a.top); cx.lineTo(x1, a.bottom); cx.stroke();
+      // 500 line
+      cx.beginPath(); cx.moveTo(x2, a.top); cx.lineTo(x2, a.bottom); cx.stroke();
+      cx.restore();
+    }
+  };
+
+  // Reference lines at y=250 and y=500
+  const refPlugin = {
+    id: 'pgRef',
+    afterDraw: function(chart) {
+      const cx = chart.ctx, a = chart.chartArea, s = chart.scales;
+      [250, 500].forEach(function(val) {
+        const y = s.y.getPixelForValue(val);
+        cx.save();
+        cx.setLineDash([4, 4]);
+        cx.strokeStyle = 'rgba(138,180,201,0.4)'; cx.lineWidth = 1;
+        cx.beginPath(); cx.moveTo(a.left, y); cx.lineTo(a.right, y); cx.stroke();
+        cx.font = '500 9px "DM Mono", monospace';
+        cx.fillStyle = 'rgba(138,180,201,0.75)';
+        cx.textAlign = 'left'; cx.textBaseline = 'bottom';
+        cx.fillText(val + ' preGDD', a.left + 4, y - 3);
+        cx.restore();
+      });
+    }
+  };
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, 0, 0, 340);
+  grad.addColorStop(0, 'rgba(138,180,201,0.28)');
+  grad.addColorStop(1, 'rgba(138,180,201,0.02)');
+
+  pregddChartInst = new Chart(ctx, {
+    type: 'line',
+    plugins: [windowPlugin, refPlugin],
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Cumulative preGDD',
+        data: cumArr,
+        borderColor: '#8ab4c9',
+        backgroundColor: grad,
+        borderWidth: 2.5,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: '#8ab4c9',
+        fill: true,
+        tension: 0.35,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#2c1a0e', titleColor: '#8ab4c9', bodyColor: '#faf5eb',
+          borderColor: 'rgba(138,180,201,0.25)', borderWidth: 1, padding: 10,
+          titleFont: { family: 'DM Mono', size: 10 }, bodyFont: { family: 'DM Sans', size: 12 },
+          callbacks: {
+            title: function(c) {
+              // Format "MM-DD" label to "Month D"
+              const mmdd = c[0].label;
+              const p = mmdd.split('-');
+              return new Date(2001, parseInt(p[0])-1, parseInt(p[1]))
+                .toLocaleString('en-US', { month: 'short', day: 'numeric' });
+            },
+            label: function(c) { return ' preGDD: ' + c.raw; }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(74,46,26,0.04)' },
+          ticks: {
+            font: { family: 'DM Mono', size: 9 }, color: '#7a6248',
+            maxRotation: 45, maxTicksLimit: 12,
+            callback: function(v, i) {
+              const mmdd = this.getLabelForValue(v);
+              if (!mmdd) return '';
+              // Show label on the 1st of each month
+              return mmdd.slice(3) === '01' ? ['Jan','Feb','Mar','Apr','May','Jun'][parseInt(mmdd.slice(0,2))-1] : '';
+            }
+          }
+        },
+        y: {
+          grid: { color: 'rgba(138,180,201,0.08)' },
+          ticks: { font: { family: 'DM Mono', size: 9 }, color: '#8ab4c9' },
+          title: { display: true, text: 'Cumulative preGDD (base 32°F)', color: '#8ab4c9', font: { family: 'DM Mono', size: 9 } },
+          min: 0,
+        }
+      }
+    }
+  });
+}
+
+['zipInput', 'baseTempInput'].forEach(function(id) {
+  $(id).addEventListener('keydown', function(e) { if (e.key === 'Enter') loadData(); });
+});
+</script>
+</body>
+</html>

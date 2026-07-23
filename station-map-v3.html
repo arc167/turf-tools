@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turf Tools · GHCND Climate Station Coverage</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --cream:    #f7f3ed;
+    --parchment:#ede8df;
+    --earth:    #2c1a0e;
+    --soil:     #7a4a28;
+    --leaf:     #4a7c3f;
+    --clay:     #c4622d;
+    --muted:    #9a8676;
+    --border:   #d6cfc4;
+    --dot:      #c4622d;
+    --dot-glow: rgba(196, 98, 45, 0.35);
+    --land:     #e8e2d8;
+    --water:    #d4e6f0;
+    --state-stroke: #c8bfb3;
+    --nat-stroke:   #a89880;
+  }
+
+  body {
+    background: var(--cream);
+    color: var(--earth);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 24px 60px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 32px;
+    max-width: 760px;
+  }
+
+  .eyebrow {
+    font-size: 10px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--clay);
+    font-weight: 500;
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.6rem, 4vw, 2.6rem);
+    font-weight: 900;
+    color: var(--earth);
+    line-height: 1.1;
+    margin-bottom: 10px;
+  }
+
+  .subtitle {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .05em;
+    line-height: 1.7;
+  }
+
+  .map-container {
+    position: relative;
+    width: 100%;
+    max-width: 1000px;
+    background: var(--parchment);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 32px rgba(44,26,14,0.10);
+  }
+
+  #map-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .state-path {
+    fill: var(--land);
+    stroke: var(--state-stroke);
+    stroke-width: 0.6;
+  }
+
+  .nation-path {
+    fill: none;
+    stroke: var(--nat-stroke);
+    stroke-width: 1.4;
+  }
+
+  .water-bg {
+    fill: var(--water);
+  }
+
+  .station-dot {
+    fill: var(--dot);
+    stroke: #fff;
+    stroke-width: 1.2;
+    cursor: pointer;
+    transition: r 0.15s ease, filter 0.15s ease;
+  }
+
+  .station-dot:hover {
+    filter: drop-shadow(0 0 6px var(--dot-glow));
+  }
+
+  /* Tooltip */
+  #tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: var(--earth);
+    color: var(--cream);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    box-shadow: 0 4px 18px rgba(44,26,14,0.3);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    z-index: 100;
+    max-width: 220px;
+    line-height: 1.55;
+  }
+
+  #tooltip.visible { opacity: 1; }
+
+  .tooltip-name {
+    font-weight: 500;
+    font-size: 11.5px;
+    color: #f5d9c0;
+    margin-bottom: 2px;
+  }
+
+  .tooltip-id {
+    font-size: 9px;
+    opacity: 0.65;
+    letter-spacing: .06em;
+  }
+
+  /* Stats strip */
+  .stats {
+    display: flex;
+    gap: 0;
+    border-top: 1.5px solid var(--border);
+  }
+
+  .stat {
+    flex: 1;
+    text-align: center;
+    padding: 14px 12px;
+    border-right: 1px solid var(--border);
+  }
+  .stat:last-child { border-right: none; }
+
+  .stat-val {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--clay);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 8.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 10px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 9.5px;
+    color: var(--muted);
+    letter-spacing: .06em;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--dot);
+    border: 1.5px solid #fff;
+    box-shadow: 0 0 0 1px var(--dot);
+    flex-shrink: 0;
+  }
+
+  footer {
+    margin-top: 24px;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: .08em;
+    text-align: center;
+    line-height: 1.8;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">r/LawnAnswers · Turf Tools</div>
+  <h1>GHCND Climate Station Coverage</h1>
+  <p class="subtitle">
+    <span id="station-count-text">700</span> NOAA GHCND stations used for climate normals, freeze dates &amp; pre-emergent timing<br>
+    Nearest station is selected by Haversine distance for each ZIP code query.
+  </p>
+</header>
+
+<div class="map-container">
+  <svg id="map-svg" viewBox="0 0 960 600"></svg>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="station-count-stat">700</div><div class="stat-label">Stations</div></div>
+    <div class="stat"><div class="stat-val" id="state-count-stat">50</div><div class="stat-label">States + DC</div></div>
+    <div class="stat"><div class="stat-val">~30 mi</div><div class="stat-label">Median Gap</div></div>
+    <div class="stat"><div class="stat-val">1991–2020</div><div class="stat-label">Normals Period</div></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot"></div>
+      <span>GHCND Climate Station (hover for details)</span>
+    </div>
+    <div class="legend-item" style="margin-left:auto;font-size:8.5px;opacity:0.7;">
+      NOAA NCEI · 1991–2020 Daily Normals
+    </div>
+  </div>
+</div>
+
+<footer>
+  Station coordinates from NOAA GHCND inventory · Selected by nearest Haversine distance to entered ZIP code<br>
+  Data: DLY-TMAX-NORMAL, DLY-TMIN-NORMAL, freeze dates · Open-Meteo ERA5 provides supplemental soil temperature data
+</footer>
+
+<div id="tooltip"></div>
+
+<script>
+const STATIONS = [
+  // ── AK ───────────────────────────────────
+  ['USW00026411', 61.174, -149.996, 'Anchorage, AK'],
+  ['USW00026615', 60.779, -161.838, 'Bethel, AK'],
+  ['USW00026427', 63.998, -145.455, 'Delta Junction, AK'],
+  ['USW00025624', 64.734, -141.138, 'Eagle, AK'],
+  ['USW00026410', 64.804, -147.876, 'Fairbanks, AK'],
+  ['USW00026442', 66.553, -145.155, 'Fort Yukon, AK'],
+  ['USW00026528', 60.567, -150.9, 'Kenai, AK'],
+  ['USW00025309', 55.355, -131.714, 'Ketchikan, AK'],
+  ['USW00025503', 58.682, -156.649, 'King Salmon, AK'],
+  ['USW00025501', 57.75, -152.494, 'Kodiak, AK'],
+  ['USW00026617', 64.512, -165.445, 'Nome, AK'],
+  ['USW00026435', 70.194, -148.476, 'Prudhoe Bay, AK'],
+  ['USW00026516', 56.948, -133.909, 'Wrangell, AK'],
+  // ── AL ───────────────────────────────────
+  ['USW00003892', 32.6161, -85.4333, 'Auburn Opelika Ap, AL'],
+  ['USW00013876', 33.57, -86.75, 'Birmingham, AL'],
+  ['USW00063899', 31.145, -87.0517, 'Brewton 3 Nne                      Crn, AL'],
+  ['USW00013867', 31.321, -85.449, 'Dothan, AL'],
+  ['USW00013884', 34.555, -87.215, 'Florence, AL'],
+  ['USW00013883', 31.318, -85.449, 'Fort Rucker, AL'],
+  ['USW00053870', 33.973, -86.089, 'Gadsden, AL'],
+  ['USW00013872', 34.648, -86.775, 'Huntsville, AL'],
+  ['USW00013878', 32.517, -88.07, 'Meridian, AL'],
+  ['USW00013895', 32.496, -87.881, 'Meridian-Demopolis, AL'],
+  ['USW00013894', 30.69, -88.24, 'Mobile, AL'],
+  ['USW00013871', 32.301, -86.394, 'Montgomery, AL'],
+  ['USW00013877', 34.745, -87.652, 'Muscle Shoals, AL'],
+  ['USW00073801', 33.2125, -87.5914, 'Northport 2 S                      Crn, AL'],
+  // ── AR ───────────────────────────────────
+  ['USW00013963', 33.308, -92.812, 'El Dorado, AR'],
+  ['USW00013966', 36.282, -94.307, 'Fayetteville-XNA, AR'],
+  ['USW00093990', 34.478, -93.096, 'Hot Springs, AR'],
+  ['USW00013965', 35.832, -90.647, 'Jonesboro, AR'],
+  ['USW00013999', 34.91, -92.15, 'Little Rock, AR'],
+  ['USW00053996', 34.5453, -94.2025, 'Mena Intermountain Ap, AR'],
+  ['USW00053919', 33.6361, -91.7556, 'Monticello Muni Ap, AR'],
+  ['USW00013967', 35.612, -92.468, 'Mountain View, AR'],
+  ['USW00003931', 35.204, -91.745, 'Searcy, AR'],
+  ['USW00013964', 33.672, -94.037, 'Texarkana, AR'],
+  ['USW00053959', 35.14, -90.2358, 'W Memphis Muni Ap, AR'],
+  // ── AZ ───────────────────────────────────
+  ['USW00023187', 33.302, -112.459, 'Casa Grande, AZ'],
+  ['USW00003145', 34.574, -112.042, 'Cottonwood, AZ'],
+  ['USW00023093', 31.423, -109.907, 'Douglas, AZ'],
+  ['USW00023194', 35.138, -111.671, 'Flagstaff, AZ'],
+  ['USW00023186', 35.259, -113.938, 'Kingman, AZ'],
+  ['USW00023198', 36.926, -111.448, 'Page, AZ'],
+  ['USW00003017', 33.43, -112.02, 'Phoenix, AZ'],
+  ['USW00023184', 34.654, -112.423, 'Prescott, AZ'],
+  ['USW00023196', 34.265, -110.003, 'Show Low, AZ'],
+  ['USW00023197', 31.588, -110.344, 'Sierra Vista, AZ'],
+  ['USW00023183', 32.12, -110.94, 'Tucson, AZ'],
+  ['USW00023185', 35.022, -110.723, 'Winslow, AZ'],
+  ['USW00023189', 32.516, -114.617, 'Yuma MCAS, AZ'],
+  ['USW00023195', 32.658, -114.606, 'Yuma, AZ'],
+  // ── CA ───────────────────────────────────
+  ['USW00094299', 41.4836, -120.5614, 'Alturas Muni Ap, CA'],
+  ['USW00023230', 35.44, -119.057, 'Bakersfield, CA'],
+  ['USW00023256', 39.795, -121.862, 'Chico, CA'],
+  ['USW00023225', 35.654, -117.688, 'China Lake, CA'],
+  ['USW00023271', 41.769, -124.237, 'Crescent City, CA'],
+  ['USW00023158', 32.826, -115.578, 'El Centro, CA'],
+  ['USW00023254', 40.978, -124.109, 'Eureka, CA'],
+  ['USW00023161', 36.303, -119.819, 'Fresno, CA'],
+  ['USW00023244', 38.9, -120.006, 'Lake Tahoe, CA'],
+  ['USW00003159', 34.7411, -118.2125, 'Lancaster, CA'],
+  ['USW00023278', 37.805, -122.011, 'Livermore, CA'],
+  ['USW00023285', 33.938, -118.39, 'Los Angeles LAX, CA'],
+  ['USW00024214', 41.7333, -122.55, 'Montague Yreka Muni Ap, CA'],
+  ['USW00023232', 36.662, -121.602, 'Monterey, CA'],
+  ['USW00023179', 34.7678, -114.6183, 'Needles Ap                         Hcn, CA'],
+  ['USW00093217', 34.056, -117.601, 'Ontario, CA'],
+  ['USW00023237', 34.201, -119.122, 'Oxnard, CA'],
+  ['USW00093193', 33.811, -116.505, 'Palm Springs, CA'],
+  ['USW00023293', 40.565, -122.316, 'Redding, CA'],
+  ['USW00023284', 38.695, -121.592, 'Sacramento McClellan, CA'],
+  ['USW00023253', 38.512, -121.5, 'Sacramento, CA'],
+  ['USW00023257', 32.734, -117.189, 'San Diego, CA'],
+  ['USW00023272', 37.62, -122.37, 'San Francisco, CA'],
+  ['USW00023234', 37.35, -121.93, 'San Jose, CA'],
+  ['USW00093116', 33.2339, -119.4558, 'San Nicolas Is                         72291, CA'],
+  ['USW00093226', 35.6656, -121.2847, 'San Simeon Pt Piedras Blancas          72390, CA'],
+  ['USW00023188', 33.68, -117.87, 'Santa Ana, CA'],
+  ['USW00023199', 34.427, -119.843, 'Santa Barbara, CA'],
+  ['USW00023229', 34.9, -120.458, 'Santa Maria, CA'],
+  ['USW00023213', 38.5036, -122.8111, 'Santa Rosa Sonoma Co Ap, CA'],
+  ['USW00023192', 35.3333, -116.0833, 'Silver Lake Caa Ap, CA'],
+  ['USW00023155', 37.975, -120.952, 'Stockton, CA'],
+  ['USW00053139', 36.6019, -117.145, 'Stovepipe Wells 1 Sw               Crn, CA'],
+  ['USW00023250', 39.497, -123.208, 'Ukiah, CA'],
+  ['USW00053150', 37.7592, -119.8208, 'Yosemite Village 12 W              Crn, CA'],
+  // ── CO ───────────────────────────────────
+  ['USW00024060', 39.217, -106.869, 'Aspen, CO'],
+  ['USW00003084', 37.7067, -106.1444, 'Center A 4 Ssw                     Crn, CO'],
+  ['USW00093037', 38.81, -104.71, 'Colorado Springs, CO'],
+  ['USW00024017', 40.576, -107.519, 'Craig, CO'],
+  ['USW00094018', 39.858, -104.667, 'Denver Intl, CO'],
+  ['USW00094075', 39.856, -104.674, 'Denver, CO'],
+  ['USW00094082', 40.2447, -108.9678, 'Dinosaur 2 E                       Crn, CO'],
+  ['USW00024015', 37.274, -107.869, 'Durango, CO'],
+  ['USW00003078', 38.5442, -102.5025, 'Eads 16 Ene                        Crn, CO'],
+  ['USW00026455', 39.566, -105.114, 'Evergreen, CO'],
+  ['USW00024018', 40.588, -105.042, 'Fort Collins, CO'],
+  ['USW00023061', 39.11, -108.53, 'Grand Junction, CO'],
+  ['USW00094059', 40.436, -104.638, 'Greeley, CO'],
+  ['USW00024016', 38.533, -106.932, 'Gunnison, CO'],
+  ['USW00026451', 38.285, -104.497, 'Pueblo, CO'],
+  ['USW00003028', 37.2833, -102.6139, 'Springfield Comanche Natl Gras, CO'],
+  ['USW00023070', 40.277, -103.807, 'Sterling, CO'],
+  ['USW00024059', 40.277, -103.807, 'Sterling-2, CO'],
+  ['USW00003083', 39.6553, -102.6217, 'Stratton 24 N                      Crn, CO'],
+  ['USW00024114', 38.048, -107.879, 'Telluride, CO'],
+  ['USW00093034', 37.253, -104.341, 'Trinidad, CO'],
+  ['USW00000157', 40.75, -106.2669, 'Walden Jackson County Ap, CO'],
+  // ── CT ───────────────────────────────────
+  ['USW00014743', 41.163, -73.135, 'Bridgeport, CT'],
+  ['USW00054734', 41.3722, -73.4833, 'Danbury Muni Ap, CT'],
+  ['USW00014730', 41.737, -72.651, 'Hartford, CT'],
+  ['USW00094702', 41.738, -72.65, 'Hartford, CT'],
+  ['USW00054788', 41.5097, -72.8278, 'Meriden Markham Muni Ap, CT'],
+  ['USW00014751', 41.33, -72.05, 'New Haven, CT'],
+  ['USW00014740', 41.268, -72.887, 'New Haven, CT'],
+  ['USW00014753', 41.264, -72.888, 'New Haven, CT'],
+  ['USW00064707', 41.4833, -73.1333, 'Oxford Waterbury, CT'],
+  ['USW00054779', 41.988, -71.992, 'Putnam, CT'],
+  ['USW00054767', 41.7425, -72.1825, 'Willimantic Windham Ap, CT'],
+  // ── DC ───────────────────────────────────
+  ['USW00013713', 38.85, -77.04, 'Reagan National, DC'],
+  ['USW00093725', 38.9053, -77.0525, 'Washington, DC'],
+  // ── DE ───────────────────────────────────
+  ['USW00013707', 39.1333, -75.4667, 'Dover Afb, DE'],
+  ['USW00013764', 38.6897, -75.3625, 'Georgetown-Delaware Coastal Ap, DE'],
+  ['USW00013781', 39.6744, -75.6056, 'Wilmington New Castle Co Ap            72418, DE'],
+  // ── FL ───────────────────────────────────
+  ['USW00012851', 29.182, -81.048, 'Daytona Beach, FL'],
+  ['USW00012854', 26.069, -80.233, 'Fort Lauderdale, FL'],
+  ['USW00012841', 26.581, -81.755, 'Fort Myers, FL'],
+  ['USW00012844', 29.69, -82.27, 'Gainesville, FL'],
+  ['USW00012835', 29.692, -82.273, 'Gainesville, FL'],
+  ['USW00012815', 30.39, -81.88, 'Jacksonville, FL'],
+  ['USW00012858', 24.5667, -81.8, 'Key West, FL'],
+  ['USW00003818', 30.8369, -85.1836, 'Marianna Muni Ap                       74776, FL'],
+  ['USW00012838', 28.1, -80.64, 'Melbourne, FL'],
+  ['USW00012816', 25.81, -80.28, 'Miami, FL'],
+  ['USW00012836', 26.18, -81.77, 'Naples, FL'],
+  ['USW00012834', 28.43, -81.32, 'Orlando, FL'],
+  ['USW00012843', 30.19, -85.8, 'Panama City, FL'],
+  ['USW00012867', 30.483, -87.187, 'Pensacola, FL'],
+  ['USW00012831', 28.805, -81.319, 'Sanford, FL'],
+  ['USW00012833', 30.38, -84.36, 'Tallahassee, FL'],
+  ['USW00012842', 27.96, -82.54, 'Tampa, FL'],
+  ['USW00012849', 27.921, -82.687, 'Tampa, FL'],
+  ['USW00012839', 26.68, -80.09, 'West Palm Beach, FL'],
+  ['USW00012832', 26.683, -80.098, 'West Palm Beach, FL'],
+  // ── GA ───────────────────────────────────
+  ['USW00013875', 31.54, -84.19, 'Albany, GA'],
+  ['USW00013874', 33.36, -84.56, 'Atlanta, GA'],
+  ['USW00013837', 33.4667, -82.0383, 'Augusta Daniel Fld Ap, GA'],
+  ['USW00063856', 30.8078, -81.4597, 'Brunswick 23 S                     Crn, GA'],
+  ['USW00013829', 31.537, -82.391, 'Douglas, GA'],
+  ['USW00053866', 34.272, -83.83, 'Gainesville, GA'],
+  ['USW00013823', 32.709, -83.65, 'Macon, GA'],
+  ['USW00093801', 34.3483, -85.1617, 'Rome R B Russell Ap                    72320, GA'],
+  ['USW00013873', 32.13, -81.2, 'Savannah, GA'],
+  ['USW00013841', 32.134, -81.201, 'Savannah, GA'],
+  ['USW00013897', 30.38, -83.0, 'Valdosta, GA'],
+  ['USW00013830', 30.783, -83.277, 'Valdosta, GA'],
+  // ── HI ───────────────────────────────────
+  ['USW00022501', 22.0339, -159.7831, 'Barking Sands                          91162, HI'],
+  ['USW00022602', 23.7833, -166.2167, 'Frnch Frigat Shs Nas, HI'],
+  ['USW00021504', 19.721, -155.059, 'Hilo, HI'],
+  ['USW00022521', 21.334, -157.939, 'Honolulu, HI'],
+  ['USW00022519', 21.316, -158.056, 'Honolulu, HI'],
+  ['USW00022516', 20.898, -156.43, 'Kahului-Maui, HI'],
+  ['USW00021510', 19.7378, -156.0481, 'Kailua Kona Ke-Ahole Ap, HI'],
+  ['USW00022518', 21.327, -157.922, 'Kaneohe-Oahu, HI'],
+  ['USW00022536', 21.977, -159.339, 'Lihue-Kauai, HI'],
+  ['USW00021514', 19.5353, -155.5761, 'Mauna Loa 5 Nne                    Crn, HI'],
+  ['USW00022534', 21.1544, -157.0961, 'Molokai Kaunakakai Molokai Ap          91186, HI'],
+  // ── IA ───────────────────────────────────
+  ['USW00094910', 40.754, -91.511, 'Burlington, IA'],
+  ['USW00014954', 40.754, -91.126, 'Burlington, IA'],
+  ['USW00014940', 41.88, -91.71, 'Cedar Rapids, IA'],
+  ['USW00014933', 41.53, -93.66, 'Des Moines, IA'],
+  ['USW00014934', 42.4, -90.7, 'Dubuque River, IA'],
+  ['USW00094971', 43.4008, -94.7478, 'Estherville Muni Ap, IA'],
+  ['USW00094918', 41.69, -91.533, 'Iowa City, IA'],
+  ['USW00094991', 40.6306, -93.9006, 'Lamoni Muni Ap, IA'],
+  ['USW00014930', 43.143, -93.331, 'Mason City, IA'],
+  ['USW00014943', 42.4, -96.38, 'Sioux City, IA'],
+  ['USW00014936', 42.396, -96.384, 'Sioux City, IA'],
+  ['USW00094985', 42.212, -95.835, 'Sioux City, IA'],
+  ['USW00014929', 42.558, -92.402, 'Waterloo, IA'],
+  ['USW00014946', 42.556, -92.401, 'Waterloo, IA'],
+  // ── ID ───────────────────────────────────
+  ['USW00004126', 43.4622, -113.5561, 'Arco 17 Sw                         Crn, ID'],
+  ['USW00024193', 43.53, -116.22, 'Boise Air Terminal, ID'],
+  ['USW00024243', 43.57, -116.24, 'Boise, ID'],
+  ['USW00024163', 42.079, -113.774, 'Burley, ID'],
+  ['USW00024144', 43.983, -116.113, 'Cascade, ID'],
+  ['USW00004114', 44.5231, -114.2161, 'Challis Ap, ID'],
+  ['USW00024281', 47.677, -116.817, 'Coeur d Alene, ID'],
+  ['USW00024140', 44.1667, -112.2167, 'Dubois, ID'],
+  ['USW00024149', 45.694, -116.127, 'Grangeville, ID'],
+  ['USW00024280', 43.518, -112.069, 'Idaho Falls, ID'],
+  ['USW00094182', 44.8942, -116.0997, 'Mccall Ap, ID'],
+  ['USW00094179', 43.606, -116.636, 'Mountain Home, ID'],
+  ['USW00024154', 47.4547, -115.6711, 'Mullan Pass Vor/Dme, ID'],
+  ['USW00024216', 42.919, -112.593, 'Pocatello, ID'],
+  ['USW00024215', 46.545, -117.013, 'Pullman-Moscow, ID'],
+  ['USW00024160', 42.55, -114.35, 'Twin Falls, ID'],
+  // ── IL ───────────────────────────────────
+  ['USW00093822', 38.951, -90.362, 'Alton-St Louis, IL'],
+  ['USW00093809', 37.0422, -89.1856, 'Cairo 3N, IL'],
+  ['USW00014834', 41.786, -87.752, 'Chicago Midway, IL'],
+  ['USW00094846', 41.978, -87.905, 'Chicago OHare, IL'],
+  ['USW00013809', 38.7606, -87.5989, 'Lawrenceville Vincennes Intl A, IL'],
+  ['USW00014931', 41.534, -90.516, 'Moline-Quad Cities, IL'],
+  ['USW00014842', 40.67, -89.69, 'Peoria, IL'],
+  ['USW00093989', 39.9372, -91.1967, 'Quincy Rgnl Ap                         72443, IL'],
+  ['USW00014806', 40.3131, -88.1594, 'Rantoul, IL'],
+  ['USW00014923', 39.84, -89.68, 'Springfield, IL'],
+  ['USW00003838', 38.9833, -89.1667, 'Vandalia Faa Ap, IL'],
+  ['USW00014819', 42.076, -88.034, 'Waukegan, IL'],
+  // ── IN ───────────────────────────────────
+  ['USW00014840', 40.019, -86.283, 'Anderson, IN'],
+  ['USW00063898', 38.8883, -86.5708, 'Bedford 5 Wnw                      Crn, IN'],
+  ['USW00003893', 39.1431, -86.6167, 'Bloomington Monroe Co Ap, IN'],
+  ['USW00013803', 39.2667, -85.9, 'Columbus Bakalar Ap                    72436, IN'],
+  ['USW00093817', 38.05, -87.53, 'Evansville, IN'],
+  ['USW00014832', 41.326, -85.067, 'Fort Wayne, IN'],
+  ['USW00014805', 41.0167, -85.2167, 'Ft Wayne Baer Fld, IN'],
+  ['USW00014895', 41.597, -87.007, 'Gary-Chicago, IN'],
+  ['USW00014896', 39.71, -86.28, 'Indianapolis, IN'],
+  ['USW00014991', 40.453, -86.937, 'Lafayette, IN'],
+  ['USW00014839', 40.649, -85.401, 'Muncie, IN'],
+  ['USW00094995', 40.242, -85.396, 'Muncie, IN'],
+  ['USW00094833', 40.65, -86.15, 'Peru Grissom Afb, IN'],
+  ['USW00014746', 41.702, -86.317, 'South Bend, IN'],
+  ['USW00014835', 39.432, -87.305, 'Terre Haute Hulman, IN'],
+  ['USW00093824', 38.712, -87.285, 'Terre Haute, IN'],
+  // ── KS ───────────────────────────────────
+  ['USW00013983', 37.172, -95.55, 'Coffeyville, KS'],
+  ['USW00013990', 39.55, -97.65, 'Concordia, KS'],
+  ['USW00003932', 37.765, -99.968, 'Dodge City, KS'],
+  ['USW00013987', 37.831, -100.765, 'Dodge City, KS'],
+  ['USW00013985', 37.927, -100.724, 'Garden City, KS'],
+  ['USW00023065', 39.3669, -101.7003, 'Goodland                               72465, KS'],
+  ['USW00013989', 38.841, -99.322, 'Hays, KS'],
+  ['USW00013988', 38.86, -99.972, 'Hays, KS'],
+  ['USW00013982', 38.058, -97.861, 'Hutchinson, KS'],
+  ['USW00013994', 39.359, -94.923, 'Kansas City, KS'],
+  ['USW00013986', 39.127, -96.793, 'Manhattan, KS'],
+  ['USW00003957', 37.2839, -98.5528, 'Medicine Lodge 1E                      72452, KS'],
+  ['USW00013980', 39.068, -95.623, 'Topeka, KS'],
+  ['USW00013984', 39.041, -95.622, 'Topeka, KS'],
+  ['USW00003928', 37.65, -97.433, 'Wichita, KS'],
+  ['USW00013996', 37.65, -97.43, 'Wichita, KS'],
+  // ── KY ───────────────────────────────────
+  ['USW00063849', 37.2503, -86.2325, 'Bowling Green 21 Nne               Crn, KY'],
+  ['USW00003845', 36.962, -86.419, 'Bowling Green, KY'],
+  ['USW00093814', 39.0444, -84.6725, 'Cincinnati/Northern Kentucky I         72421, KY'],
+  ['USW00013807', 37.9, -85.9667, 'Godman Afbu Ft Knox, KY'],
+  ['USW00053839', 37.343, -83.753, 'Hazard, KY'],
+  ['USW00003889', 37.5908, -83.3131, 'Jackson                                72419, KY'],
+  ['USW00093820', 37.97, -84.61, 'Lexington, KY'],
+  ['USW00013820', 38.047, -84.606, 'Lexington, KY'],
+  ['USW00003888', 37.082, -84.077, 'London, KY'],
+  ['USW00014745', 38.18, -85.74, 'Louisville, KY'],
+  ['USW00003816', 38.769, -83.557, 'Maysville, KY'],
+  ['USW00053803', 37.75, -87.1667, 'Owensboro Daviess Co Rgnl Ap, KY'],
+  ['USW00003820', 36.858, -87.679, 'Paducah, KY'],
+  ['USW00093837', 37.741, -84.779, 'Richmond, KY'],
+  ['USW00053838', 38.051, -84.052, 'Winchester, KY'],
+  // ── LA ───────────────────────────────────
+  ['USW00012957', 31.614, -92.099, 'Alexandria, LA'],
+  ['USW00012959', 32.317, -93.66, 'Barksdale, LA'],
+  ['USW00012863', 28.9667, -89.3833, 'Burrwood Wb, LA'],
+  ['USW00013940', 32.317, -90.752, 'Jackson MS, LA'],
+  ['USW00012960', 30.53, -92.04, 'Lafayette, LA'],
+  ['USW00003937', 30.1253, -93.2158, 'Lake Charles                           72240, LA'],
+  ['USW00013971', 32.52, -92.04, 'Monroe, LA'],
+  ['USW00012916', 30.07, -89.99, 'New Orleans Lakefront, LA'],
+  ['USW00013958', 29.99, -90.25, 'New Orleans, LA'],
+  ['USW00012912', 30.002, -90.258, 'New Orleans, LA'],
+  ['USW00012968', 29.5589, -91.525, 'Salt Pt, LA'],
+  ['USW00013957', 32.45, -93.82, 'Shreveport, LA'],
+  ['USW00012958', 32.514, -93.66, 'Shreveport, LA'],
+  // ── MA ───────────────────────────────────
+  ['USW00014733', 42.36, -71.01, 'Boston, MA'],
+  ['USW00014739', 42.362, -71.006, 'Boston, MA'],
+  ['USW00014657', 41.6833, -67.7833, 'Georges Shoals Afs, MA'],
+  ['USW00094701', 41.669, -70.521, 'Hyannis, MA'],
+  ['USW00054768', 42.6972, -73.1697, 'N Adams Harriman Ap, MA'],
+  ['USW00014658', 41.0167, -69.5, 'Nantucket Shoals Afs, MA'],
+  ['USW00054777', 41.676, -70.957, 'New Bedford, MA'],
+  ['USW00014794', 42.197, -72.534, 'Springfield Westover, MA'],
+  ['USW00014793', 42.205, -72.546, 'Springfield, MA'],
+  ['USW00054778', 41.9, -71.006, 'Taunton, MA'],
+  ['USW00014741', 42.27, -71.87, 'Worcester, MA'],
+  // ── MD ───────────────────────────────────
+  ['USW00013701', 39.4717, -76.1697, 'Aberdeen Phillips Fld, MD'],
+  ['USW00013714', 39.18, -76.67, 'Baltimore, MD'],
+  ['USW00093721', 39.178, -76.669, 'Baltimore, MD'],
+  ['USW00013705', 38.8167, -76.8667, 'Camp Springs Andrews Afb               74594, MD'],
+  ['USW00093730', 39.644, -78.759, 'Cumberland, MD'],
+  ['USW00093734', 39.615, -78.76, 'Cumberland, MD'],
+  ['USW00013722', 39.175, -77.182, 'Frederick, MD'],
+  ['USW00093706', 39.7061, -77.7303, 'Hagerstown Rgnl Ap, MD'],
+  ['USW00093786', 38.3092, -75.1233, 'Ocean City Muni Ap, MD'],
+  ['USW00013780', 38.337, -75.51, 'Salisbury, MD'],
+  ['USW00003757', 38.1417, -76.4292, 'St Inigoes Webster Nolf, MD'],
+  ['USW00013743', 38.981, -77.456, 'Washington Dulles, MD'],
+  // ── ME ───────────────────────────────────
+  ['USW00014604', 44.533, -69.667, 'Augusta, ME'],
+  ['USW00014605', 44.807, -68.828, 'Bangor, ME'],
+  ['USW00014618', 44.323, -68.001, 'Bar Harbor, ME'],
+  ['USW00014603', 47.286, -68.309, 'Caribou, ME'],
+  ['USW00054795', 44.904, -66.982, 'Eastport, ME'],
+  ['USW00094626', 45.4619, -69.5956, 'Greenville Maine Forestry Svc          72619, ME'],
+  ['USW00014609', 46.1183, -67.7928, 'Houlton Ap, ME'],
+  ['USW00014610', 45.6478, -68.6925, 'Millinocket Muni Ap, ME'],
+  ['USW00014611', 44.105, -70.231, 'Norway-Paris, ME'],
+  ['USW00014607', 43.99, -70.95, 'Portland, ME'],
+  ['USW00094644', 46.874, -68.018, 'Presque Isle, ME'],
+  ['USW00064709', 43.3936, -70.7078, 'Sanford Rgnl Ap, ME'],
+  ['USW00094623', 43.9639, -69.7114, 'Wiscasset Ap, ME'],
+  // ── MI ───────────────────────────────────
+  ['USW00014829', 44.356, -85.419, 'Cadillac, MI'],
+  ['USW00014841', 44.354, -85.416, 'Cadillac, MI'],
+  ['USW00014703', 42.36, -83.01, 'Detroit, MI'],
+  ['USW00014826', 42.234, -83.356, 'Detroit, MI'],
+  ['USW00014850', 42.966, -83.743, 'Flint, MI'],
+  ['USW00014859', 46.6667, -85.95, 'Grand Marais 2 E, MI'],
+  ['USW00014833', 42.88, -85.523, 'Grand Rapids, MI'],
+  ['USW00094814', 43.163, -86.243, 'Grand Rapids, MI'],
+  ['USW00014827', 42.741, -84.588, 'Lansing, MI'],
+  ['USW00094849', 46.544, -87.556, 'Marquette, MI'],
+  ['USW00014808', 44.45, -83.4, 'Oscoda Wurtsmith Ap, MI'],
+  ['USW00014830', 45.574, -84.796, 'Pellston, MI'],
+  ['USW00014831', 43.322, -83.844, 'Saginaw, MI'],
+  ['USW00004836', 46.476, -84.37, 'Sault Ste Marie, MI'],
+  ['USW00014836', 46.476, -84.372, 'Sault Ste Marie, MI'],
+  // ── MN ───────────────────────────────────
+  ['USW00094960', 46.397, -94.133, 'Brainerd, MN'],
+  ['USW00014913', 46.842, -92.19, 'Duluth, MN'],
+  ['USW00004994', 48.3056, -95.8744, 'Goodridge 12 Nnw                   Crn, MN'],
+  ['USW00094992', 47.7453, -90.3456, 'Grand Marais, MN'],
+  ['USW00094961', 47.386, -93.28, 'Hibbing, MN'],
+  ['USW00014914', 44.221, -94.009, 'Mankato, MN'],
+  ['USW00014920', 44.273, -93.654, 'Mankato, MN'],
+  ['USW00094994', 44.222, -93.917, 'Mankato, MN'],
+  ['USW00094976', 44.45, -95.8167, 'Marshall Ryan Fld, MN'],
+  ['USW00014918', 44.88, -93.23, 'Minneapolis, MN'],
+  ['USW00014911', 43.908, -92.494, 'Rochester, MN'],
+  ['USW00094938', 45.455, -94.054, 'St Cloud, MN'],
+  ['USW00014922', 44.88, -93.23, 'St Paul, MN'],
+  ['USW00014916', 45.559, -94.059, 'St. Cloud, MN'],
+  // ── MO ───────────────────────────────────
+  ['USW00013998', 36.499, -93.435, 'Branson, MO'],
+  ['USW00003963', 37.226, -89.571, 'Cape Girardeau, MO'],
+  ['USW00013992', 37.226, -89.571, 'Cape Girardeau, MO'],
+  ['USW00013301', 39.8667, -93.1469, 'Chillicothe 22 Ene                 Crn, MO'],
+  ['USW00014927', 38.82, -92.22, 'Columbia, MO'],
+  ['USW00093994', 39.6833, -91.3333, 'Hannibal, MO'],
+  ['USW00013997', 37.152, -94.498, 'Joplin, MO'],
+  ['USW00003996', 36.621, -93.397, 'Joplin, MO'],
+  ['USW00013947', 38.806, -94.714, 'Kansas City Intl, MO'],
+  ['USW00023909', 37.6344, -91.7225, 'Salem 10 W                         Crn, MO'],
+  ['USW00013995', 37.227, -93.388, 'Springfield, MO'],
+  ['USW00003945', 39.784, -94.716, 'St Joseph, MO'],
+  ['USW00014736', 38.75, -90.37, 'St. Louis Lambert, MO'],
+  // ── MS ───────────────────────────────────
+  ['USW00013941', 30.418, -88.924, 'Biloxi, MS'],
+  ['USW00013939', 33.65, -88.923, 'Columbus, MS'],
+  ['USW00013865', 33.451, -88.591, 'Columbus-Golden Triangle, MS'],
+  ['USW00013866', 33.483, -90.986, 'Greenville, MS'],
+  ['USW00013978', 33.4961, -90.0894, 'Greenwood Leflore Ap                   74758, MS'],
+  ['USW00023803', 34.8222, -89.4347, 'Holly Springs 4 N                  Crn, MS'],
+  ['USW00013970', 32.31, -90.08, 'Jackson, MS'],
+  ['USW00053808', 31.4667, -89.3333, 'Laurel Hattiesburg Rgnl Ap, MS'],
+  ['USW00013946', 32.37, -88.703, 'Meridian, MS'],
+  ['USW00013969', 31.614, -91.298, 'Natchez, MS'],
+  ['USW00013938', 31.033, -91.147, 'Natchez, MS'],
+  ['USW00013864', 34.268, -88.77, 'Tupelo, MS'],
+  // ── MT ───────────────────────────────────
+  ['USW00024090', 45.81, -108.54, 'Billings, MT'],
+  ['USW00024132', 45.788, -108.54, 'Billings, MT'],
+  ['USW00024128', 45.66, -111.15, 'Bozeman, MT'],
+  ['USW00004137', 45.1581, -113.0058, 'Dillon 18 Wsw                      Crn, MT'],
+  ['USW00024143', 48.208, -106.617, 'Glasgow, MT'],
+  ['USW00024034', 46.878, -104.711, 'Glendive, MT'],
+  ['USW00024156', 48.57, -110.44, 'Havre, MT'],
+  ['USW00024135', 46.606, -112.012, 'Helena, MT'],
+  ['USW00024138', 48.194, -114.256, 'Kalispell, MT'],
+  ['USW00024036', 47.048, -109.467, 'Lewistown, MT'],
+  ['USW00024112', 47.5167, -111.1833, 'Malmstrom Afb, MT'],
+  ['USW00024033', 46.428, -105.865, 'Miles City, MT'],
+  ['USW00094008', 46.428, -105.886, 'Miles City, MT'],
+  ['USW00024127', 46.92, -114.09, 'Missoula, MT'],
+  ['USW00024037', 44.52, -110.44, 'West Yellowstone, MT'],
+  // ── NC ───────────────────────────────────
+  ['USW00013880', 35.432, -82.542, 'Asheville, NC'],
+  ['USW00093765', 34.7325, -76.6567, 'Beaufort - Asos, NC'],
+  ['USW00093785', 35.9333, -79.0642, 'Chapel Hill Williams Ap, NC'],
+  ['USW00013881', 35.21, -80.94, 'Charlotte, NC'],
+  ['USW00013761', 36.0167, -76.5667, 'Edenton Naas, NC'],
+  ['USW00093738', 36.286, -76.018, 'Elizabeth City, NC'],
+  ['USW00093729', 34.991, -78.88, 'Fayetteville, NC'],
+  ['USW00013748', 36.1, -79.94, 'Greensboro, NC'],
+  ['USW00013882', 35.569, -77.055, 'Greenville, NC'],
+  ['USW00013745', 35.2167, -75.7167, 'Hatteras, NC'],
+  ['USW00093819', 35.33, -77.606, 'Kinston, NC'],
+  ['USW00013766', 35.9172, -75.7, 'Manteo Ap, NC'],
+  ['USW00053836', 35.563, -81.381, 'Morganton, NC'],
+  ['USW00053843', 36.499, -80.155, 'Mount Airy, NC'],
+  ['USW00093719', 35.0683, -77.0478, 'New Bern - Asos, NC'],
+  ['USW00093727', 34.7083, -77.4397, 'New Rvr Mcaf, NC'],
+  ['USW00093781', 36.4394, -77.7097, 'Roanoke Rapids Halifax Co Ap, NC'],
+  ['USW00053860', 35.856, -77.892, 'Rocky Mount, NC'],
+  ['USW00013722', 35.8776, -78.7875, 'Raleigh-Durham Intl AP, NC'],
+  ['USW00093016', 34.271, -77.902, 'Wilmington NHC, NC'],
+  // ── ND ───────────────────────────────────
+  ['USW00024012', 46.772, -100.757, 'Bismarck, ND'],
+  ['USW00094914', 48.114, -98.908, 'Devils Lake, ND'],
+  ['USW00014919', 46.92, -96.81, 'Fargo, ND'],
+  ['USW00094041', 47.6461, -101.4406, 'Garrison, ND'],
+  ['USW00014917', 47.946, -97.176, 'Grand Forks, ND'],
+  ['USW00094038', 46.0108, -102.6517, 'Hettinger Muni Ap, ND'],
+  ['USW00054937', 46.7703, -99.4778, 'Jamestown 38 Wsw                   Crn, ND'],
+  ['USW00094080', 46.8947, -103.3769, 'Medora 7 E                         Crn, ND'],
+  ['USW00014924', 48.9711, -97.2417, 'Pembina                            Hcn, ND'],
+  ['USW00094014', 48.1739, -103.6367, 'Williston Sloulin Fld                  72767, ND'],
+  ['USW00024013', 48.787, -102.407, 'Williston, ND'],
+  // ── NE ───────────────────────────────────
+  ['USW00094996', 42.607, -99.434, 'Ainsworth, NE'],
+  ['USW00024028', 42.468, -102.965, 'Alliance, NE'],
+  ['USW00094957', 40.0792, -95.5892, 'Falls City Brenner Fld, NE'],
+  ['USW00014941', 40.968, -98.313, 'Grand Island, NE'],
+  ['USW00004998', 40.1492, -97.5867, 'Hebron Muni Ap, NE'],
+  ['USW00004935', 40.45, -99.3392, 'Holdrege Brewster Fld Ap, NE'],
+  ['USW00014939', 40.85, -96.76, 'Lincoln, NE'],
+  ['USW00014942', 41.985, -97.439, 'Norfolk, NE'],
+  ['USW00014935', 41.128, -100.682, 'North Platte, NE'],
+  ['USW00024023', 41.455, -100.55, 'North Platte, NE'],
+  ['USW00014938', 41.31, -96.0, 'Offutt AFB, NE'],
+  ['USW00094967', 41.874, -103.596, 'Scottsbluff, NE'],
+  // ── NH ───────────────────────────────────
+  ['USW00094700', 44.5761, -71.1783, 'Berlin Muni Ap                         72616, NH'],
+  ['USW00014710', 43.204, -71.503, 'Concord, NH'],
+  ['USW00054770', 42.8067, -72.0014, 'Jaffrey Muni Ap Silver Rch, NH'],
+  ['USW00054762', 42.898, -72.272, 'Keene, NH'],
+  ['USW00054745', 43.404, -71.946, 'Laconia, NH'],
+  ['USW00014776', 43.6333, -72.3167, 'Lebanon Caa Ap, NH'],
+  ['USW00094823', 42.77, -71.53, 'Manchester, NH'],
+  ['USW00014755', 44.2703, -71.3033, 'Mt Washington                  Gsn     72613, NH'],
+  ['USW00054798', 44.051, -71.013, 'Plymouth, NH'],
+  ['USW00004743', 43.0833, -70.8167, 'Portsmouth Pease Afb, NH'],
+  ['USW00054791', 43.2794, -70.9242, 'Rochester Skyhaven Ap, NH'],
+  ['USW00054728', 44.3658, -71.5522, 'Whitefield Mt Washington Rgnl, NH'],
+  // ── NJ ───────────────────────────────────
+  ['USW00004739', 40.1833, -74.0667, 'Belmar Asc, NJ'],
+  ['USW00013756', 38.95, -74.8833, 'Cape May Nas, NJ'],
+  ['USW00013735', 39.3661, -75.0778, 'Millville Muni Ap, NJ'],
+  ['USW00093780', 39.9408, -74.8408, 'S Jersey Rgnl Ap, NJ'],
+  ['USW00054785', 40.6242, -74.6689, 'Somerset Ap, NJ'],
+  ['USW00054793', 41.1992, -74.6258, 'Sussex Ap, NJ'],
+  ['USW00094741', 40.8589, -74.0561, 'Teterboro Ap, NJ'],
+  ['USW00014773', 40.2269, -74.7464, 'Trenton, NJ'],
+  // ── NM ───────────────────────────────────
+  ['USW00023044', 32.895, -105.663, 'Alamogordo, NM'],
+  ['USW00023042', 35.14, -106.61, 'Albuquerque ABQ, NM'],
+  ['USW00023050', 35.04, -106.61, 'Albuquerque, NM'],
+  ['USW00023052', 34.849, -106.718, 'Belen, NM'],
+  ['USW00093033', 32.3336, -104.2583, 'Cavern City Ap, NM'],
+  ['USW00023048', 36.445, -105.107, 'Cimarron, NM'],
+  ['USW00003094', 36.47, -103.1239, 'Clayton 3 Ene                      Crn, NM'],
+  ['USW00023051', 34.425, -103.103, 'Clovis, NM'],
+  ['USW00023040', 32.262, -107.1, 'Deming, NM'],
+  ['USW00003075', 36.9353, -107.0003, 'Dulce 1 Nw, NM'],
+  ['USW00023009', 36.741, -108.228, 'Farmington, NM'],
+  ['USW00003080', 33.715, -108.7772, 'Reserve 1 W                        Crn, NM'],
+  ['USW00023043', 33.938, -104.528, 'Roswell NM2, NM'],
+  ['USW00023022', 33.302, -104.531, 'Roswell, NM'],
+  ['USW00023031', 32.635, -108.274, 'Silver City, NM'],
+  ['USW00023049', 36.74, -105.572, 'Taos-Angel Fire, NM'],
+  ['USW00093045', 33.2369, -107.2686, 'Truth Or Consequences Muni Ap          72271, NM'],
+  ['USW00093044', 35.0706, -108.8389, 'Zuni, NM'],
+  // ── NV ───────────────────────────────────
+  ['USW00053138', 39.0117, -114.2089, 'Baker 5 W                          Crn, NV'],
+  ['USW00023156', 36.916, -116.885, 'Beatty, NV'],
+  ['USW00023157', 37.001, -114.868, 'Caliente, NV'],
+  ['USW00004139', 41.8483, -119.6358, 'Denio 52 Wsw                       Crn, NV'],
+  ['USW00024121', 40.832, -115.791, 'Elko, NV'],
+  ['USW00003170', 39.6014, -116.0056, 'Eureka Ap                              72477, NV'],
+  ['USW00023153', 38.544, -118.176, 'Hawthorne, NV'],
+  ['USW00023154', 36.085, -114.988, 'Henderson, NV'],
+  ['USW00023169', 36.08, -115.15, 'Las Vegas, NV'],
+  ['USW00024172', 40.0683, -118.5703, 'Lovelock Derby Fld Ap, NV'],
+  ['USW00024151', 39.5, -119.78, 'Reno, NV'],
+  ['USW00053145', 37.6172, -116.2642, 'Tonopah Test Rng #74 Nellis Af, NV'],
+  ['USW00023175', 38.068, -117.087, 'Tonopah, NV'],
+  ['USW00024130', 40.898, -117.805, 'Winnemucca, NV'],
+  // ── NY ───────────────────────────────────
+  ['USW00014735', 42.748, -73.803, 'Albany, NY'],
+  ['USW00004724', 42.208, -75.98, 'Binghamton, NY'],
+  ['USW00014768', 42.94, -78.736, 'Buffalo, NY'],
+  ['USW00014732', 42.94, -78.732, 'Buffalo, NY'],
+  ['USW00014748', 42.492, -79.272, 'Dunkirk-Fredonia, NY'],
+  ['USW00004725', 44.931, -74.845, 'Massena, NY'],
+  ['USW00054780', 41.0731, -71.9236, 'Montauk Ap, NY'],
+  ['USW00093732', 39.8, -72.6667, 'New York Shoals Afs, NY'],
+  ['USW00094728', 40.778, -73.88, 'New York-LaGuardia, NY'],
+  ['USW00014820', 43.17, -77.67, 'Rochester, NY'],
+  ['USW00014771', 43.111, -76.106, 'Syracuse, NY'],
+  ['USW00014772', 43.8833, -73.4, 'Ticonderoga 3 Ne, NY'],
+  ['USW00014786', 43.989, -75.967, 'Watertown, NY'],
+  ['USW00094746', 41.093, -73.707, 'White Plains, NY'],
+  // ── OH ───────────────────────────────────
+  ['USW00014813', 41.0372, -81.4633, 'Akron Fulton Intl Ap, OH'],
+  ['USW00004857', 41.7794, -80.6969, 'Ashtabula Co Ap, OH'],
+  ['USW00093818', 38.4167, -82.5, 'Chesapeake Huntington, OH'],
+  ['USW00014852', 39.18, -84.67, 'Cincinnati, OH'],
+  ['USW00014848', 41.41, -81.86, 'Cleveland, OH'],
+  ['USW00014898', 39.9, -82.88, 'Columbus, OH'],
+  ['USW00014838', 39.428, -83.822, 'Dayton, OH'],
+  ['USW00004851', 41.3358, -84.4286, 'Defiance Ap, OH'],
+  ['USW00093815', 39.055, -84.672, 'Hamilton, OH'],
+  ['USW00004850', 40.7081, -84.0214, 'Lima Allen Co Ap, OH'],
+  ['USW00014891', 40.8203, -82.5178, 'Mansfield Lahm Rgnl Ap                 72420, OH'],
+  ['USW00014857', 40.254, -82.897, 'Mansfield, OH'],
+  ['USW00004852', 40.4703, -81.4217, 'New Phila Clever Fld, OH'],
+  ['USW00014849', 41.264, -82.016, 'Sandusky, OH'],
+  ['USW00014846', 41.45, -82.7167, 'Sandusky, OH'],
+  ['USW00014837', 41.591, -83.807, 'Toledo, OH'],
+  ['USW00014843', 40.491, -80.246, 'Youngstown, OH'],
+  // ── OK ───────────────────────────────────
+  ['USW00013902', 34.65, -99.2667, 'Altus Afb                              72352, OK'],
+  ['USW00013975', 34.377, -97.284, 'Ardmore, OK'],
+  ['USW00013909', 36.3333, -97.9167, 'Enid Vance Afb, OK'],
+  ['USW00053182', 36.5683, -101.6097, 'Goodwell 2 Se                      Crn, OK'],
+  ['USW00023174', 34.65, -98.42, 'Lawton, OK'],
+  ['USW00003030', 34.851, -95.783, 'McAlester, OK'],
+  ['USW00093953', 35.6578, -95.3658, 'Muskogee Davis Fld, OK'],
+  ['USW00013904', 35.23, -97.6, 'Oklahoma City, OK'],
+  ['USW00053927', 36.1347, -97.1083, 'Stillwater 5 Wnw                   Crn, OK'],
+  ['USW00013968', 36.2, -95.9, 'Tulsa, OK'],
+  ['USW00013972', 36.743, -98.671, 'Woodward, OK'],
+  // ── OR ───────────────────────────────────
+  ['USW00024266', 46.159, -123.879, 'Astoria, OR'],
+  ['USW00024165', 44.903, -117.818, 'Baker City, OR'],
+  ['USW00024259', 44.049, -121.167, 'Bend, OR'],
+  ['USW00024181', 43.592, -118.956, 'Burns, OR'],
+  ['USW00004141', 43.2717, -124.3186, 'Coos Bay 8 Sw                      Crn, OR'],
+  ['USW00024222', 44.564, -123.283, 'Corvallis, OR'],
+  ['USW00024221', 44.12, -123.21, 'Eugene, OR'],
+  ['USW00094240', 42.723, -122.871, 'Grants Pass, OR'],
+  ['USW00004125', 44.5561, -119.6458, 'John Day 35 Wnw                    Crn, OR'],
+  ['USW00024250', 42.15, -120.4, 'Lakeview Nas, OR'],
+  ['USW00024225', 42.37, -122.87, 'Medford, OR'],
+  ['USW00024162', 44.0142, -117.0081, 'Ontario, OR'],
+  ['USW00024176', 45.695, -118.853, 'Pendleton, OR'],
+  ['USW00024229', 45.6, -122.6, 'Portland, OR'],
+  ['USW00024155', 45.54, -122.97, 'Portland-Hillsboro, OR'],
+  ['USW00094107', 42.5903, -117.8644, 'Rome State Ap, OR'],
+  ['USW00024232', 44.923, -123.003, 'Salem, OR'],
+  // ── PA ───────────────────────────────────
+  ['USW00014711', 40.652, -75.44, 'Allentown, PA'],
+  ['USW00014853', 40.653, -77.854, 'Altoona, PA'],
+  ['USW00004751', 41.7983, -78.6356, 'Bradford Rgnl Ap, PA'],
+  ['USW00014860', 42.0803, -80.1822, 'Erie Intl Ap                       Hcn 72526, PA'],
+  ['USW00014777', 40.193, -76.764, 'Harrisburg, PA'],
+  ['USW00004726', 40.315, -78.8308, 'Johnstown Cambria Co Ap, PA'],
+  ['USW00013739', 39.87, -75.23, 'Philadelphia, PA'],
+  ['USW00014778', 40.491, -80.233, 'Pittsburgh, PA'],
+  ['USW00014792', 40.495, -80.233, 'Pittsburgh, PA'],
+  ['USW00014714', 41.339, -75.724, 'Scranton-Wilkes-Barre, PA'],
+  ['USW00014737', 40.851, -77.848, 'State College, PA'],
+  ['USW00014712', 40.803, -77.849, 'State College, PA'],
+  ['USW00014742', 41.241, -77.048, 'Williamsport, PA'],
+  ['USW00014719', 40.993, -76.921, 'Williamsport, PA'],
+  // ── RI ───────────────────────────────────
+  ['USW00014799', 41.1667, -71.5667, 'Block Island, RI'],
+  ['USW00054797', 41.4783, -71.5417, 'Kingston 1 W                       Crn, RI'],
+  ['USW00054796', 41.532, -71.282, 'Newport, RI'],
+  ['USW00064710', 41.9206, -71.4911, 'North Central State Ap, RI'],
+  ['USW00014764', 41.72, -71.43, 'Providence, RI'],
+  ['USW00014763', 41.724, -71.428, 'Providence, RI'],
+  ['USW00014765', 41.598, -71.761, 'Westerly, RI'],
+  ['USW00094798', 41.351, -71.8, 'Westerly, RI'],
+  ['USW00054789', 41.771, -71.498, 'Woonsocket, RI'],
+  // ── SC ───────────────────────────────────
+  ['USW00013887', 33.019, -80.04, 'Charleston AFB, SC'],
+  ['USW00013955', 32.9, -80.04, 'Charleston, SC'],
+  ['USW00013779', 33.94, -80.987, 'Columbia, SC'],
+  ['USW00013749', 34.186, -79.723, 'Florence, SC'],
+  ['USW00013886', 34.302, -79.719, 'Florence, SC'],
+  ['USW00063820', 34.896, -82.219, 'Greenville Spartanburg, SC'],
+  ['USW00013782', 34.9, -82.22, 'Greenville-Spartanburg, SC'],
+  ['USW00053874', 34.2539, -82.1528, 'Greenwood Co Ap, SC'],
+  ['USW00013879', 33.679, -78.928, 'Myrtle Beach, SC'],
+  ['USW00013786', 33.57, -80.803, 'Orangeburg, SC'],
+  ['USW00093844', 32.3167, -80.6833, 'Parris Island, SC'],
+  ['USW00053871', 34.9836, -81.0561, 'Rock Hill York Co Ap, SC'],
+  ['USW00013885', 33.958, -80.005, 'Sumter, SC'],
+  // ── SD ───────────────────────────────────
+  ['USW00014944', 45.45, -98.422, 'Aberdeen, SD'],
+  ['USW00024027', 44.072, -103.057, 'Box Elder, SD'],
+  ['USW00094037', 45.6042, -103.5469, 'Buffalo (Asos), SD'],
+  ['USW00024032', 44.385, -98.22, 'Huron, SD'],
+  ['USW00024022', 45.677, -102.034, 'Lemmon, SD'],
+  ['USW00094052', 45.5494, -100.4086, 'Mobridge Muni Ap, SD'],
+  ['USW00024008', 43.578, -100.418, 'Murdo, SD'],
+  ['USW00024025', 44.381, -100.285, 'Pierre, SD'],
+  ['USW00094039', 43.0261, -102.52, 'Pine Ridge Ap, SD'],
+  ['USW00024011', 43.77, -104.81, 'Rapid City, SD'],
+  ['USW00014945', 43.085, -100.587, 'Winner, SD'],
+  ['USW00024024', 42.987, -97.997, 'Yankton, SD'],
+  ['USW00094997', 42.917, -97.385, 'Yankton, SD'],
+  // ── TN ───────────────────────────────────
+  ['USW00053875', 35.0667, -85.3, 'Chattanooga Wb City, TN'],
+  ['USW00053846', 36.62, -87.415, 'Clarksville, TN'],
+  ['USW00063855', 36.0139, -85.1344, 'Crossville 7 Nw                    Crn, TN'],
+  ['USW00003809', 36.0003, -89.4094, 'Dyersburg Muni Ap, TN'],
+  ['USW00003876', 35.599, -88.916, 'Jackson, TN'],
+  ['USW00003841', 35.96, -88.917, 'Jackson-McKellar, TN'],
+  ['USW00013891', 35.81, -83.99, 'Knoxville, TN'],
+  ['USW00013760', 35.812, -83.994, 'Knoxville, TN'],
+  ['USW00013893', 35.04, -89.99, 'Memphis, TN'],
+  ['USW00003839', 36.1167, -86.6833, 'Nashville Berry Fld Af, TN'],
+  ['USW00093803', 35.9667, -85.7833, 'Smithville Caa Ap, TN'],
+  ['USW00013896', 35.387, -86.246, 'Tullahoma, TN'],
+  // ── TX ───────────────────────────────────
+  ['USW00013910', 32.4333, -99.85, 'Abilene Dyess Afb                      69019, TX'],
+  ['USW00023090', 35.23, -101.7, 'Amarillo, TX'],
+  ['USW00012919', 30.19, -97.69, 'Austin, TX'],
+  ['USW00022010', 26.178, -97.655, 'Brownsville, TX'],
+  ['USW00023007', 34.4275, -100.2839, 'Childress Muni Ap                      72366, TX'],
+  ['USW00013960', 32.85, -96.85, 'Dallas-Fort Worth, TX'],
+  ['USW00022004', 29.3667, -100.9, 'Del Rio Wb City, TX'],
+  ['USW00023047', 31.81, -106.38, 'El Paso, TX'],
+  ['USW00053965', 33.11, -98.5553, 'Graham Muni Ap, TX'],
+  ['USW00000357', 31.6661, -98.1489, 'Hamilton Muni Ap, TX'],
+  ['USW00012917', 29.98, -95.36, 'Houston, TX'],
+  ['USW00012918', 29.533, -95.0, 'Houston-Ellington, TX'],
+  ['USW00013973', 30.5106, -99.7664, 'Junction Kimble Co Ap                  74740, TX'],
+  ['USW00012924', 27.543, -99.461, 'Laredo, TX'],
+  ['USW00012971', 32.485, -94.711, 'Longview, TX'],
+  ['USW00093987', 31.2358, -94.7547, 'Lufkin Angelina Co Ap, TX'],
+  ['USW00000461', 31.6411, -96.5144, 'Mexia Limestone County Ap, TX'],
+  ['USW00013962', 31.945, -102.202, 'Midland Intl, TX'],
+  ['USW00012992', 31.94, -102.19, 'Midland, TX'],
+  ['USW00022016', 29.3483, -103.2092, 'Panther Junction 2 N               Crn, TX'],
+  ['USW00093955', 33.6333, -95.45, 'Paris, TX'],
+  ['USW00023023', 31.367, -103.683, 'Pecos, TX'],
+  ['USW00023021', 33.6, -102.05, 'Reese Afb, TX'],
+  ['USW00012972', 28.0836, -97.0467, 'Rockport Aransas Co Ap, TX'],
+  ['USW00012921', 29.53, -98.47, 'San Antonio, TX'],
+  // ── Tri-Cities TN-VA ───────────────────────────────────
+  ['USW00013724', 36.478, -82.407, 'Tri-Cities TN-VA'],
+  // ── UT ───────────────────────────────────
+  ['USW00053012', 37.2667, -109.6075, 'Blanding 26 Ssw                    Crn, UT'],
+  ['USW00053171', 38.5942, -113.7511, 'Milford 42 Wnw                     Crn, UT'],
+  ['USW00023190', 38.764, -109.755, 'Moab-Canyonlands, UT'],
+  ['USW00024131', 37.935, -110.701, 'Natural Bridges, UT'],
+  ['USW00023066', 41.12, -111.97, 'Ogden, UT'],
+  ['USW00024137', 39.617, -110.751, 'Price, UT'],
+  ['USW00024126', 39.4, -110.764, 'Price, UT'],
+  ['USW00024196', 40.32, -111.725, 'Provo, UT'],
+  ['USW00024194', 38.772, -111.798, 'Richfield, UT'],
+  ['USW00023062', 40.78, -111.97, 'Salt Lake City, UT'],
+  ['USW00023176', 37.0, -113.1, 'St. George, UT'],
+  ['USW00023159', 40.45, -109.51, 'Vernal, UT'],
+  ['USW00024111', 40.7333, -114.0333, 'Wendover Darby Afb, UT'],
+  // ── VA ───────────────────────────────────
+  ['USW00053826', 38.139, -78.452, 'Charlottesville, VA'],
+  ['USW00013755', 37.9333, -75.4333, 'Chincoteague Nas, VA'],
+  ['USW00093728', 38.7167, -77.1833, 'Davison Aaf, VA'],
+  ['USW00013731', 39.0, -78.2333, 'Front Royal 6 Nnw, VA'],
+  ['USW00093720', 37.0, -76.411, 'Newport News, VA'],
+  ['USW00013736', 37.13, -76.49, 'Norfolk, VA'],
+  ['USW00013737', 36.898, -76.018, 'Norfolk, VA'],
+  ['USW00013740', 37.5, -77.32, 'Richmond, VA'],
+  ['USW00013750', 37.509, -77.319, 'Richmond, VA'],
+  ['USW00013730', 37.29, -79.97, 'Roanoke, VA'],
+  ['USW00013741', 37.217, -80.011, 'Roanoke, VA'],
+  ['USW00013753', 38.133, -79.372, 'Staunton, VA'],
+  // ── VT ───────────────────────────────────
+  ['USW00054781', 42.8936, -73.2489, 'Bennington Morse State Ap              72516, VT'],
+  ['USW00054712', 42.898, -72.619, 'Brattleboro, VT'],
+  ['USW00014606', 44.47, -73.15, 'Burlington, VT'],
+  ['USW00054763', 44.025, -73.128, 'Middlebury, VT'],
+  ['USW00094705', 44.205, -72.5656, 'Montpelier Ap, VT'],
+  ['USW00054771', 44.271, -72.562, 'Montpelier, VT'],
+  ['USW00014616', 44.935, -72.018, 'Newport, VT'],
+  ['USW00094791', 44.888, -72.229, 'Newport, VT'],
+  ['USW00094737', 43.5333, -72.95, 'Rutland State Ap, VT'],
+  ['USW00054776', 43.626, -72.973, 'Rutland, VT'],
+  ['USW00054742', 44.42, -72.0194, 'Saint Johnsbury Asos                   72614, VT'],
+  ['USW00054740', 43.3422, -72.5214, 'Springfield Hartness State Ap, VT'],
+  // ── WA ───────────────────────────────────
+  ['USW00024282', 48.658, -122.539, 'Bellingham, WA'],
+  ['USW00024227', 48.793, -122.537, 'Bellingham, WA'],
+  ['USW00094227', 48.793, -122.537, 'Bellingham, WA'],
+  ['USW00024274', 46.97, -123.93, 'Hoquiam, WA'],
+  ['USW00094185', 47.203, -119.122, 'Moses Lake, WA'],
+  ['USW00024233', 47.45, -122.31, 'Seattle, WA'],
+  ['USW00024257', 47.62, -117.53, 'Spokane, WA'],
+  ['USW00024240', 48.3833, -124.7333, 'Tatoosh Island Wb, WA'],
+  ['USW00094298', 45.6211, -122.6542, 'Vancouver Pearson Ap, WA'],
+  ['USW00094103', 46.0333, -118.3333, 'Walla Walla Wso City                   72788, WA'],
+  ['USW00024283', 46.568, -120.543, 'Yakima, WA'],
+  ['USW00024252', 46.569, -120.543, 'Yakima, WA'],
+  // ── WI ───────────────────────────────────
+  ['USW00014950', 46.528, -90.921, 'Ashland, WI'],
+  ['USW00094862', 45.812, -91.727, 'Chippewa Falls, WI'],
+  ['USW00014915', 44.866, -91.485, 'Eau Claire, WI'],
+  ['USW00004840', 43.7694, -88.4908, 'Fond Du Lac Co Ap, WI'],
+  ['USW00094831', 44.481, -88.129, 'Green Bay, WI'],
+  ['USW00054831', 42.683, -88.305, 'Kenosha, WI'],
+  ['USW00094811', 43.1333, -89.3333, 'Madison Truax, WI'],
+  ['USW00004963', 43.0192, -91.1236, 'Prairie Du Chien Ap, WI'],
+  ['USW00094854', 45.627, -89.467, 'Rhinelander, WI'],
+  ['USW00094876', 45.811, -91.727, 'Rice Lake, WI'],
+  ['USW00094982', 44.778, -89.667, 'Wausau, WI'],
+  ['USW00094928', 43.879, -90.284, 'Wisconsin Dells, WI'],
+  // ── WV ───────────────────────────────────
+  ['USW00003872', 37.7836, -81.1228, 'Beckley Raleigh Co Ap                  72412, WV'],
+  ['USW00013726', 37.298, -81.208, 'Bluefield, WV'],
+  ['USW00013729', 38.37, -81.59, 'Charleston, WV'],
+  ['USW00013742', 39.458, -80.697, 'Clarksburg, WV'],
+  ['USW00013723', 38.889, -79.857, 'Elkins, WV'],
+  ['USW00013738', 38.876, -79.846, 'Elkins-2, WV'],
+  ['USW00003860', 38.3653, -82.5547, 'Huntington Tri-State Ap                72425, WV'],
+  ['USW00013725', 37.858, -80.399, 'Lewisburg, WV'],
+  ['USW00013734', 39.4039, -77.975, 'Martinsburg E W Virginia Rgnl      Hcn, WV'],
+  ['USW00013728', 39.643, -79.916, 'Morgantown, WV'],
+  ['USW00003804', 39.3394, -81.4439, 'Parkersburg Ap, WV'],
+  ['USW00014894', 40.17, -80.6442, 'Wheeling Ohio Co Ap, WV'],
+  // ── WY ───────────────────────────────────
+  ['USW00024041', 41.154, -104.82, 'Cheyenne, WY'],
+  ['USW00094057', 42.7961, -105.3806, 'Converse Co Ap Asos, WY'],
+  ['USW00004111', 41.2728, -111.0306, 'Evanston Uinta Co Burns Fld, WY'],
+  ['USW00024026', 43.964, -104.812, 'Gillette, WY'],
+  ['USW00024048', 44.5172, -108.0753, 'Greybull S Big Horn Co Ap, WY'],
+  ['USW00024088', 43.607, -110.739, 'Jackson, WY'],
+  ['USW00094078', 42.6753, -108.6686, 'Lander 11 Sse                      Crn, WY'],
+  ['USW00024010', 41.312, -105.679, 'Laramie, WY'],
+  ['USW00024089', 41.312, -105.682, 'Laramie, WY'],
+  ['USW00024091', 44.068, -103.054, 'Newcastle, WY'],
+  ['USW00024057', 41.8064, -107.1953, 'Rawlins Ap                             72669, WY'],
+  ['USW00094025', 42.065, -104.16, 'Torrington, WY'],
+];
+
+// Keep the header/stats strip in sync with the actual STATIONS list.
+(function() {
+  document.getElementById('station-count-text').textContent = STATIONS.length;
+  document.getElementById('station-count-stat').textContent = STATIONS.length;
+  const states = new Set(
+    STATIONS.map(s => {
+      const parts = s[3].split(',');
+      return parts.length > 1 ? parts[parts.length - 1].trim() : null;
+    }).filter(Boolean)
+  );
+  document.getElementById('state-count-stat').textContent = states.size;
+})();
+
+(async function() {
+  const svg = d3.select('#map-svg');
+  const W = 960, H = 600;
+
+  // Albers USA projection
+  const projection = d3.geoAlbersUsa()
+    .scale(1280)
+    .translate([W / 2, H / 2]);
+
+  const path = d3.geoPath().projection(projection);
+
+  // Water background
+  svg.append('rect')
+    .attr('width', W).attr('height', H)
+    .attr('class', 'water-bg');
+
+  // Fetch US TopoJSON from CDN
+  let topo;
+  try {
+    topo = await d3.json('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json');
+  } catch(e) {
+    console.warn('TopoJSON load failed, drawing dots only:', e.message);
+  }
+
+  if (topo) {
+    const topojson = window.topojson || await import('https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js').catch(()=>null);
+    // Use d3 with inline topojson parsing if available
+    // Try loading topojson-client
+    const topoScript = document.createElement('script');
+    topoScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js';
+    document.head.appendChild(topoScript);
+    await new Promise(r => { topoScript.onload = r; topoScript.onerror = r; });
+
+    if (window.topojson) {
+      const states = window.topojson.feature(topo, topo.objects.states);
+      const nation = window.topojson.feature(topo, topo.objects.nation || topo.objects.states);
+
+      svg.selectAll('.state-path')
+        .data(states.features)
+        .enter()
+        .append('path')
+        .attr('class', 'state-path')
+        .attr('d', path);
+
+      // Nation outline
+      svg.append('path')
+        .datum({ type: 'FeatureCollection', features: states.features })
+        .attr('class', 'nation-path')
+        .attr('d', path);
+    }
+  }
+
+  // Plot stations
+  const tooltip = document.getElementById('tooltip');
+
+  const dots = svg.selectAll('.station-dot')
+    .data(STATIONS.filter(s => {
+      const p = projection([s[2], s[1]]);
+      return p !== null;
+    }))
+    .enter()
+    .append('circle')
+    .attr('class', 'station-dot')
+    .attr('r', 5)
+    .attr('cx', d => projection([d[2], d[1]])[0])
+    .attr('cy', d => projection([d[2], d[1]])[1])
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('r', 8);
+      tooltip.innerHTML = `<div class="tooltip-name">${d[3]}</div><div class="tooltip-id">${d[0]}</div><div style="font-size:9px;opacity:0.55;margin-top:2px;">${d[1].toFixed(2)}°N, ${Math.abs(d[2]).toFixed(2)}°W</div>`;
+      tooltip.classList.add('visible');
+    })
+    .on('mousemove', function(event) {
+      const x = event.clientX + 14;
+      const y = event.clientY - 10;
+      const tw = 220, th = 70;
+      tooltip.style.left = (x + tw > window.innerWidth ? x - tw - 20 : x) + 'px';
+      tooltip.style.top  = (y + th > window.innerHeight ? y - th : y) + 'px';
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('r', 5);
+      tooltip.classList.remove('visible');
+    });
+
+  // Staggered fade-in
+  dots.style('opacity', 0)
+    .transition()
+    .delay((d, i) => i * 8)
+    .duration(300)
+    .style('opacity', 1);
+
+})();
+</script>
+</body>
+</html>
